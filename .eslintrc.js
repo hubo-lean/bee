@@ -1,0 +1,19 @@
+module.exports = {
+  root: true,
+  extends: ["eslint:recommended"],
+  parserOptions: {
+    ecmaVersion: "latest",
+    sourceType: "module",
+  },
+  env: {
+    node: true,
+    es2022: true,
+  },
+  ignorePatterns: ["node_modules/", ".next/", "dist/", "coverage/"],
+  overrides: [
+    {
+      files: ["apps/web/**/*.{ts,tsx}"],
+      extends: ["next/core-web-vitals"],
+    },
+  ],
+};

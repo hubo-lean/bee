@@ -2,14 +2,14 @@
 
 ## Story Overview
 
-| Field | Value |
-|-------|-------|
-| **Story ID** | 1.2 |
-| **Epic** | [Epic 1: Foundation & Infrastructure](epic-1.md) |
-| **Priority** | P0 - Critical Path |
-| **Estimated Effort** | Medium (2-3 days) |
-| **Dependencies** | Story 1.1 (Project Setup) |
-| **Blocks** | Stories 1.3, 1.5, all Epic 2+ stories |
+| Field                | Value                                            |
+| -------------------- | ------------------------------------------------ |
+| **Story ID**         | 1.2                                              |
+| **Epic**             | [Epic 1: Foundation & Infrastructure](epic-1.md) |
+| **Priority**         | P0 - Critical Path                               |
+| **Estimated Effort** | Medium (2-3 days)                                |
+| **Dependencies**     | Story 1.1 (Project Setup)                        |
+| **Blocks**           | Stories 1.3, 1.5, all Epic 2+ stories            |
 
 ## User Story
 
@@ -19,22 +19,26 @@
 
 ## Detailed Description
 
-This story sets up Supabase as the PostgreSQL database with Prisma ORM. It creates the complete data model for Bee including all core entities: User, InboxItem, Note, Action, Project, Area, Resource, Objective, Conversation, ReviewSession, and ClassificationAudit.
+This story sets up Supabase as the PostgreSQL database with Prisma ORM. It creates the complete data model for Bee including all core entities: User, InboxItem, Note, Action, Project, Area, Resource, Objective, Conversation, ReviewSession, ClassificationAudit, EmailAccount, and CalendarAccount.
 
 The database will include:
+
 - **pgvector extension** for semantic search capabilities
 - **Proper indexes** for query performance
+- **Encrypted credential storage** for external service connections
 - **Seed script** for development data
 
 ## Acceptance Criteria
 
 ### AC1: Supabase Project Configured
+
 - [ ] Supabase project created (or use existing)
 - [ ] Connection string available and working
 - [ ] pgvector extension enabled in Supabase dashboard
 - [ ] Database accessible from development machine
 
 ### AC2: Prisma ORM Configured
+
 - [ ] Prisma installed in `packages/db`
 - [ ] `prisma/schema.prisma` created with datasource config
 - [ ] Prisma client generates without errors
@@ -42,8 +46,12 @@ The database will include:
 - [ ] Client importable in `apps/web`
 
 ### AC3: Core Entities Defined
+
 All entities from architecture document implemented:
-- [ ] `User` - Authentication and settings
+
+- [ ] `User` - Authentication and settings (email/password credentials)
+- [ ] `EmailAccount` - Connected email providers (IMAP credentials, encrypted)
+- [ ] `CalendarAccount` - Connected calendar providers (CalDAV/OAuth, encrypted)
 - [ ] `InboxItem` - Captured items with AI classification
 - [ ] `ClassificationAudit` - AI decision audit trail
 - [ ] `Note` - Processed notes in PARA structure
@@ -57,7 +65,10 @@ All entities from architecture document implemented:
 - [ ] `FailedWebhook` - Webhook retry queue
 
 ### AC4: Relationships Defined
-- [ ] User has many: InboxItem, Note, Action, Project, Area, Resource, Objective, Conversation, ReviewSession
+
+- [ ] User has many: InboxItem, Note, Action, Project, Area, Resource, Objective, Conversation, ReviewSession, EmailAccount, CalendarAccount
+- [ ] EmailAccount belongs to User (encrypted credentials stored)
+- [ ] CalendarAccount belongs to User (encrypted credentials stored)
 - [ ] InboxItem has many: ClassificationAudit, Action (spawned)
 - [ ] InboxItem has one: Note (when converted)
 - [ ] Project/Area/Resource have many: Note, Action
@@ -65,20 +76,25 @@ All entities from architecture document implemented:
 - [ ] All foreign keys properly defined
 
 ### AC5: Vector Search Support
+
 - [ ] `embedding` field on InboxItem (vector(1536))
 - [ ] `embedding` field on Note (vector(1536))
 - [ ] `embedding` field on Conversation (vector(1536))
 - [ ] SQL function for similarity search created in Supabase
 
 ### AC6: Indexes for Performance
+
 - [ ] Index on `InboxItem(userId, status)`
 - [ ] Index on `InboxItem(userId, createdAt)`
 - [ ] Index on `ClassificationAudit(inboxItemId)`
 - [ ] Index on `Action(userId, status)`
 - [ ] Index on `Action(dueDate)`
 - [ ] Index on `FailedWebhook(status, nextRetry)`
+- [ ] Index on `EmailAccount(userId)`
+- [ ] Index on `CalendarAccount(userId)`
 
 ### AC7: Migrations & Seed Data
+
 - [ ] Initial migration created and applied
 - [ ] `pnpm db:push` works without errors
 - [ ] `pnpm db:generate` generates client
@@ -103,14 +119,19 @@ datasource db {
 model User {
   id                    String    @id @default(uuid())
   email                 String    @unique
+  passwordHash          String?   // bcrypt hashed - null if using OAuth only
   name                  String
   avatarUrl             String?
-  microsoftAccessToken  String?   // Encrypted
-  microsoftRefreshToken String?   // Encrypted
+  emailVerified         DateTime?
   settings              Json      @default("{}")
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
+  // Auth.js relations (for OAuth sessions)
+  accounts              Account[]
+  sessions              Session[]
+
+  // App data relations
   inboxItems            InboxItem[]
   notes                 Note[]
   actions               Action[]
@@ -121,6 +142,128 @@ model User {
   conversations         Conversation[]
   reviewSessions        ReviewSession[]
   classificationAudits  ClassificationAudit[]
+
+  // External service connections
+  emailAccounts         EmailAccount[]
+  calendarAccounts      CalendarAccount[]
+}
+
+// NextAuth.js required models for OAuth support
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// External service connections - email providers
+model EmailAccount {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Account identification
+  email           String
+  displayName     String?
+  provider        String    // gmail, outlook, icloud, custom
+
+  // Connection type
+  connectionType  String    // imap, oauth
+
+  // IMAP credentials (encrypted with AES-256-GCM)
+  imapHost        String?
+  imapPort        Int?
+  imapUsername    String?
+  imapPassword    String?   // Encrypted
+  smtpHost        String?
+  smtpPort        Int?
+  smtpUsername    String?
+  smtpPassword    String?   // Encrypted
+
+  // OAuth credentials (for Gmail/Outlook OAuth)
+  accessToken     String?   // Encrypted
+  refreshToken    String?   // Encrypted
+  tokenExpiry     DateTime?
+
+  // Status
+  isActive        Boolean   @default(true)
+  lastSyncAt      DateTime?
+  lastError       String?
+  syncEnabled     Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([userId, email])
+  @@index([userId])
+}
+
+// External service connections - calendar providers
+model CalendarAccount {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Account identification
+  email           String
+  displayName     String?
+  provider        String    // google, outlook, apple, caldav
+
+  // Connection type
+  connectionType  String    // caldav, oauth
+
+  // CalDAV credentials (encrypted)
+  caldavUrl       String?
+  caldavUsername  String?
+  caldavPassword  String?   // Encrypted
+
+  // OAuth credentials
+  accessToken     String?   // Encrypted
+  refreshToken    String?   // Encrypted
+  tokenExpiry     DateTime?
+
+  // Status
+  isActive        Boolean   @default(true)
+  lastSyncAt      DateTime?
+  lastError       String?
+  syncEnabled     Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([userId, email])
+  @@index([userId])
 }
 
 model InboxItem {
@@ -356,8 +499,9 @@ model FailedWebhook {
 ```
 
 ### File: `packages/db/src/index.ts`
+
 ```typescript
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -366,32 +510,39 @@ const globalForPrisma = globalThis as unknown as {
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
   });
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
-export * from '@prisma/client';
+export * from "@prisma/client";
 ```
 
 ### File: `packages/db/prisma/seed.ts`
+
 ```typescript
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcrypt";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  // Create test user
+  // Hash password for test user (password: "testpassword123")
+  const passwordHash = await bcrypt.hash("testpassword123", 12);
+
+  // Create test user with password
   const user = await prisma.user.upsert({
-    where: { email: 'test@example.com' },
+    where: { email: "test@example.com" },
     update: {},
     create: {
-      email: 'test@example.com',
-      name: 'Test User',
+      email: "test@example.com",
+      passwordHash,
+      name: "Test User",
+      emailVerified: new Date(),
       settings: {
         confidenceThreshold: 0.6,
         autoArchiveDays: 15,
-        defaultModel: 'claude',
+        defaultModel: "claude",
         weeklyReviewDay: 0,
       },
     },
@@ -401,9 +552,9 @@ async function main() {
   const project = await prisma.project.create({
     data: {
       userId: user.id,
-      name: 'Sample Project',
-      description: 'A sample project for testing',
-      status: 'active',
+      name: "Sample Project",
+      description: "A sample project for testing",
+      status: "active",
     },
   });
 
@@ -411,8 +562,8 @@ async function main() {
   const area = await prisma.area.create({
     data: {
       userId: user.id,
-      name: 'Health & Fitness',
-      description: 'Personal health and fitness activities',
+      name: "Health & Fitness",
+      description: "Personal health and fitness activities",
     },
   });
 
@@ -421,24 +572,25 @@ async function main() {
     data: [
       {
         userId: user.id,
-        type: 'manual',
-        content: 'Call dentist to schedule appointment',
-        source: 'capture',
-        status: 'pending',
+        type: "manual",
+        content: "Call dentist to schedule appointment",
+        source: "capture",
+        status: "pending",
       },
       {
         userId: user.id,
-        type: 'manual',
-        content: 'Review quarterly report and prepare summary for team meeting',
-        source: 'capture',
-        status: 'pending',
+        type: "manual",
+        content: "Review quarterly report and prepare summary for team meeting",
+        source: "capture",
+        status: "pending",
       },
       {
         userId: user.id,
-        type: 'email',
-        content: 'Re: Project Deadline - Please confirm the new deadline for the marketing campaign',
-        source: 'email-forward',
-        status: 'pending',
+        type: "email",
+        content:
+          "Re: Project Deadline - Please confirm the new deadline for the marketing campaign",
+        source: "email-forward",
+        status: "pending",
       },
     ],
   });
@@ -447,14 +599,14 @@ async function main() {
   await prisma.action.create({
     data: {
       userId: user.id,
-      description: 'Email Sarah about budget proposal',
-      status: 'pending',
-      priority: 'high',
+      description: "Email Sarah about budget proposal",
+      status: "pending",
+      priority: "high",
       projectId: project.id,
     },
   });
 
-  console.log('Seed data created successfully');
+  console.log("Seed data created successfully");
 }
 
 main()
@@ -468,6 +620,7 @@ main()
 ```
 
 ### SQL for Vector Search Function (run in Supabase SQL editor)
+
 ```sql
 -- Enable pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -518,6 +671,7 @@ $$;
 ```
 
 ### File: `packages/db/package.json`
+
 ```json
 {
   "name": "@packages/db",
@@ -532,9 +686,11 @@ $$;
     "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
-    "@prisma/client": "^5.10.0"
+    "@prisma/client": "^5.10.0",
+    "bcrypt": "^5.1.1"
   },
   "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
     "prisma": "^5.10.0",
     "tsx": "^4.7.0"
   }
@@ -543,15 +699,15 @@ $$;
 
 ## Files to Create/Modify
 
-| File | Action | Purpose |
-|------|--------|---------|
-| `packages/db/package.json` | Create | Package config with Prisma |
-| `packages/db/prisma/schema.prisma` | Create | Complete database schema |
-| `packages/db/src/index.ts` | Create | Export Prisma client |
-| `packages/db/prisma/seed.ts` | Create | Development seed data |
-| `.env.local` | Update | Add DATABASE_URL, DIRECT_URL |
-| `.env.example` | Update | Document database env vars |
-| Root `package.json` | Update | Add db:* scripts |
+| File                               | Action | Purpose                                       |
+| ---------------------------------- | ------ | --------------------------------------------- |
+| `packages/db/package.json`         | Create | Package config with Prisma and bcrypt         |
+| `packages/db/prisma/schema.prisma` | Create | Complete database schema (17 models)          |
+| `packages/db/src/index.ts`         | Create | Export Prisma client                          |
+| `packages/db/prisma/seed.ts`       | Create | Development seed data with hashed password    |
+| `.env.local`                       | Update | Add DATABASE_URL, DIRECT_URL, ENCRYPTION_KEY  |
+| `.env.example`                     | Update | Document database and encryption env vars     |
+| Root `package.json`                | Update | Add db:\* scripts                             |
 
 ## Environment Variables Required
 
@@ -559,11 +715,15 @@ $$;
 # Supabase PostgreSQL
 DATABASE_URL="postgresql://postgres:[password]@db.[project].supabase.co:5432/postgres?pgbouncer=true"
 DIRECT_URL="postgresql://postgres:[password]@db.[project].supabase.co:5432/postgres"
+
+# Encryption key for service credentials (generate with: openssl rand -hex 32)
+ENCRYPTION_KEY="your-32-byte-hex-encryption-key"
 ```
 
 ## Testing Requirements
 
 ### Manual Testing
+
 1. Run `pnpm db:generate` - should generate Prisma client without errors
 2. Run `pnpm db:push` - should push schema to Supabase
 3. Open Supabase dashboard - verify all tables created
@@ -572,6 +732,7 @@ DIRECT_URL="postgresql://postgres:[password]@db.[project].supabase.co:5432/postg
 6. Verify vector extension: Run SQL query `SELECT * FROM pg_extension WHERE extname = 'vector';`
 
 ### Verification Queries (in Prisma Studio or Supabase)
+
 ```sql
 -- Verify tables created
 SELECT table_name FROM information_schema.tables
@@ -590,13 +751,13 @@ SELECT COUNT(*) FROM "InboxItem";
 
 - [ ] All acceptance criteria met
 - [ ] Prisma schema matches architecture document
-- [ ] All 12 entities created with proper relationships
+- [ ] All 17 entities created with proper relationships (User, Account, Session, VerificationToken, EmailAccount, CalendarAccount, InboxItem, ClassificationAudit, Note, Action, Project, Area, Resource, Objective, Conversation, ReviewSession, FailedWebhook)
 - [ ] Indexes created for performance
 - [ ] pgvector extension enabled and working
-- [ ] Seed script runs successfully
+- [ ] Seed script runs successfully with hashed test password
 - [ ] Prisma client importable from `apps/web`
 - [ ] No migration errors
-- [ ] Environment variables documented
+- [ ] Environment variables documented (including ENCRYPTION_KEY)
 
 ## Notes & Decisions
 
@@ -604,6 +765,10 @@ SELECT COUNT(*) FROM "InboxItem";
 - **Prisma over Supabase JS client**: Better type safety, cleaner queries for complex relationships
 - **vector(1536)**: OpenAI embedding dimension - can adjust for other providers
 - **Cascade deletes on User**: When user deleted, all their data deleted (GDPR compliance)
+- **Separate app auth from service auth**: User model has passwordHash for email/password login, while EmailAccount and CalendarAccount store external service credentials separately
+- **Auth.js models included**: Account, Session, VerificationToken models for NextAuth.js OAuth support (optional Google OAuth)
+- **Encrypted credentials**: EmailAccount and CalendarAccount store sensitive credentials (IMAP passwords, OAuth tokens) which will be encrypted at application level using AES-256-GCM (implemented in Story 1.5)
+- **bcrypt for password hashing**: 12 salt rounds for user password security
 
 ## Related Documentation
 

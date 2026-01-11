@@ -6,7 +6,12 @@
     "build": "pnpm --filter web build",
     "lint": "pnpm -r lint",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @packages/db db:generate",
+    "db:push": "pnpm --filter @packages/db db:push",
+    "db:migrate": "pnpm --filter @packages/db db:migrate",
+    "db:studio": "pnpm --filter @packages/db db:studio",
+    "db:seed": "pnpm --filter @packages/db db:seed"
   },
   "devDependencies": {
     "prettier": "^3.2.0",

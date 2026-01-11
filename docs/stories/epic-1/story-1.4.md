@@ -2,14 +2,14 @@
 
 ## Story Overview
 
-| Field | Value |
-|-------|-------|
-| **Story ID** | 1.4 |
-| **Epic** | [Epic 1: Foundation & Infrastructure](epic-1.md) |
-| **Priority** | P1 - High |
-| **Estimated Effort** | Medium (2-3 days) |
-| **Dependencies** | Story 1.1 (Project Setup), Story 1.3 (Authentication) |
-| **Blocks** | All Epic 2+ stories (UI foundation) |
+| Field                | Value                                                 |
+| -------------------- | ----------------------------------------------------- |
+| **Story ID**         | 1.4                                                   |
+| **Epic**             | [Epic 1: Foundation & Infrastructure](epic-1.md)      |
+| **Priority**         | P1 - High                                             |
+| **Estimated Effort** | Medium (2-3 days)                                     |
+| **Dependencies**     | Story 1.1 (Project Setup), Story 1.3 (Authentication) |
+| **Blocks**           | All Epic 2+ stories (UI foundation)                   |
 
 ## User Story
 
@@ -27,6 +27,7 @@ This story creates the foundational UI shell for Bee - the layout, navigation, a
 - **Performant**: Fast navigation with minimal layout shift
 
 Key screens created (as placeholders):
+
 - Dashboard (Home)
 - Inbox
 - Review
@@ -36,6 +37,7 @@ Key screens created (as placeholders):
 ## Acceptance Criteria
 
 ### AC1: Responsive Layout Structure
+
 - [ ] Root layout with providers (Session, Theme)
 - [ ] Authenticated layout wrapper for protected routes
 - [ ] Mobile layout: Full-width content with bottom nav
@@ -44,6 +46,7 @@ Key screens created (as placeholders):
 - [ ] No horizontal scrolling at any viewport width
 
 ### AC2: Mobile Bottom Navigation
+
 - [ ] Fixed bottom navigation bar (height: 64px)
 - [ ] 4 navigation items: Home, Inbox, Review, Search
 - [ ] Active state indicator on current route
@@ -52,6 +55,7 @@ Key screens created (as placeholders):
 - [ ] Safe area padding for notched devices
 
 ### AC3: Desktop Sidebar Navigation
+
 - [ ] Fixed sidebar on left (width: 256px)
 - [ ] App logo/name at top
 - [ ] Navigation items with icons and labels
@@ -60,6 +64,7 @@ Key screens created (as placeholders):
 - [ ] Sign out button accessible
 
 ### AC4: Dashboard/Home Screen
+
 - [ ] Route: `/dashboard`
 - [ ] Displays: "Welcome, [User Name]"
 - [ ] Placeholder sections for:
@@ -69,7 +74,9 @@ Key screens created (as placeholders):
 - [ ] Quick capture button visible (FAB on mobile)
 
 ### AC5: Placeholder Screens
+
 All screens render with title and "Coming soon" message:
+
 - [ ] `/inbox` - Inbox screen placeholder
 - [ ] `/review` - Daily review placeholder
 - [ ] `/search` - Search screen placeholder
@@ -77,6 +84,7 @@ All screens render with title and "Coming soon" message:
 - [ ] `/weekly` - Weekly review placeholder (not in nav, accessible via URL)
 
 ### AC6: Loading & Error States
+
 - [ ] Loading spinner component created
 - [ ] Loading state shown during navigation
 - [ ] Error boundary wraps authenticated routes
@@ -84,6 +92,7 @@ All screens render with title and "Coming soon" message:
 - [ ] 404 page for unknown routes
 
 ### AC7: Accessibility
+
 - [ ] Keyboard navigation works (Tab, Enter, Escape)
 - [ ] Focus indicators visible on all interactive elements
 - [ ] ARIA labels on navigation items
@@ -93,6 +102,7 @@ All screens render with title and "Coming soon" message:
 ## Technical Implementation Notes
 
 ### File: `app/(auth)/layout.tsx`
+
 ```typescript
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
@@ -134,6 +144,7 @@ export default async function AuthLayout({
 ```
 
 ### File: `components/navigation/sidebar.tsx`
+
 ```typescript
 'use client';
 
@@ -240,6 +251,7 @@ export function Sidebar({ user, className }: SidebarProps) {
 ```
 
 ### File: `components/navigation/bottom-nav.tsx`
+
 ```typescript
 'use client';
 
@@ -295,6 +307,7 @@ export function BottomNav({ className }: BottomNavProps) {
 ```
 
 ### File: `components/capture/capture-button.tsx`
+
 ```typescript
 'use client';
 
@@ -327,6 +340,7 @@ export function CaptureButton({ className }: CaptureButtonProps) {
 ```
 
 ### File: `app/(auth)/dashboard/page.tsx`
+
 ```typescript
 import { auth } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -412,6 +426,7 @@ export default async function DashboardPage() {
 ```
 
 ### File: `app/(auth)/inbox/page.tsx` (Placeholder Template)
+
 ```typescript
 import { Inbox } from 'lucide-react';
 
@@ -427,6 +442,7 @@ export default function InboxPage() {
 ```
 
 ### File: `components/ui/loading.tsx`
+
 ```typescript
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -452,6 +468,7 @@ export function Loading({ className, size = 'md' }: LoadingProps) {
 ```
 
 ### File: `app/(auth)/error.tsx`
+
 ```typescript
 'use client';
 
@@ -488,6 +505,7 @@ export default function Error({
 ```
 
 ### File: `app/not-found.tsx`
+
 ```typescript
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -513,13 +531,14 @@ export default function NotFound() {
 ```
 
 ### Tailwind Config Addition (safe area padding)
+
 ```javascript
 // tailwind.config.js
 module.exports = {
   theme: {
     extend: {
       padding: {
-        safe: 'env(safe-area-inset-bottom)',
+        safe: "env(safe-area-inset-bottom)",
       },
     },
   },
@@ -528,24 +547,24 @@ module.exports = {
 
 ## Files to Create/Modify
 
-| File | Action | Purpose |
-|------|--------|---------|
-| `app/(auth)/layout.tsx` | Create | Authenticated layout wrapper |
-| `app/(auth)/dashboard/page.tsx` | Create | Home dashboard |
-| `app/(auth)/inbox/page.tsx` | Create | Inbox placeholder |
-| `app/(auth)/review/page.tsx` | Create | Review placeholder |
-| `app/(auth)/search/page.tsx` | Create | Search placeholder |
-| `app/(auth)/settings/page.tsx` | Create | Settings placeholder |
-| `app/(auth)/weekly/page.tsx` | Create | Weekly review placeholder |
-| `app/(auth)/calendar/page.tsx` | Create | Calendar placeholder |
-| `app/(auth)/error.tsx` | Create | Error boundary |
-| `app/(auth)/loading.tsx` | Create | Loading state |
-| `app/not-found.tsx` | Create | 404 page |
-| `components/navigation/sidebar.tsx` | Create | Desktop sidebar |
-| `components/navigation/bottom-nav.tsx` | Create | Mobile bottom nav |
-| `components/capture/capture-button.tsx` | Create | FAB for capture |
-| `components/ui/loading.tsx` | Create | Loading spinner |
-| `tailwind.config.js` | Modify | Add safe-area padding |
+| File                                    | Action | Purpose                      |
+| --------------------------------------- | ------ | ---------------------------- |
+| `app/(auth)/layout.tsx`                 | Create | Authenticated layout wrapper |
+| `app/(auth)/dashboard/page.tsx`         | Create | Home dashboard               |
+| `app/(auth)/inbox/page.tsx`             | Create | Inbox placeholder            |
+| `app/(auth)/review/page.tsx`            | Create | Review placeholder           |
+| `app/(auth)/search/page.tsx`            | Create | Search placeholder           |
+| `app/(auth)/settings/page.tsx`          | Create | Settings placeholder         |
+| `app/(auth)/weekly/page.tsx`            | Create | Weekly review placeholder    |
+| `app/(auth)/calendar/page.tsx`          | Create | Calendar placeholder         |
+| `app/(auth)/error.tsx`                  | Create | Error boundary               |
+| `app/(auth)/loading.tsx`                | Create | Loading state                |
+| `app/not-found.tsx`                     | Create | 404 page                     |
+| `components/navigation/sidebar.tsx`     | Create | Desktop sidebar              |
+| `components/navigation/bottom-nav.tsx`  | Create | Mobile bottom nav            |
+| `components/capture/capture-button.tsx` | Create | FAB for capture              |
+| `components/ui/loading.tsx`             | Create | Loading spinner              |
+| `tailwind.config.js`                    | Modify | Add safe-area padding        |
 
 ## Dependencies to Install
 
@@ -557,6 +576,7 @@ pnpm dlx shadcn-ui@latest add card
 ## Testing Requirements
 
 ### Manual Testing
+
 1. **Mobile View** (use browser dev tools, 375px width):
    - Bottom nav visible with 4 items
    - FAB visible in bottom right
@@ -580,12 +600,13 @@ pnpm dlx shadcn-ui@latest add card
    - Screen reader announces navigation items
 
 ### Viewport Testing Matrix
-| Device | Width | Expected Layout |
-|--------|-------|-----------------|
-| iPhone SE | 375px | Bottom nav, FAB |
-| iPhone 14 | 390px | Bottom nav, FAB |
-| iPad Mini | 768px | Sidebar |
-| Desktop | 1280px | Sidebar |
+
+| Device    | Width  | Expected Layout |
+| --------- | ------ | --------------- |
+| iPhone SE | 375px  | Bottom nav, FAB |
+| iPhone 14 | 390px  | Bottom nav, FAB |
+| iPad Mini | 768px  | Sidebar         |
+| Desktop   | 1280px | Sidebar         |
 
 ## Definition of Done
 

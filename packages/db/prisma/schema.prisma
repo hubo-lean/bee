@@ -1,0 +1,364 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  name         String
+  passwordHash String?
+  avatarUrl    String?
+  settings     Json      @default("{}")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Auth relations
+  accounts Account[]
+  sessions Session[]
+
+  // App relations
+  inboxItems           InboxItem[]
+  notes                Note[]
+  actions              Action[]
+  projects             Project[]
+  areas                Area[]
+  resources            Resource[]
+  objectives           Objective[]
+  conversations        Conversation[]
+  reviewSessions       ReviewSession[]
+  classificationAudits ClassificationAudit[]
+
+  // External service connections
+  emailAccounts    EmailAccount[]
+  calendarAccounts CalendarAccount[]
+}
+
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model InboxItem {
+  id               String    @id @default(uuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type             String    // manual, image, voice, email, forward
+  content          String
+  mediaUrl         String?
+  source           String
+  status           String    @default("pending") // pending, processing, reviewed, archived
+  aiClassification Json?
+  extractedActions Json      @default("[]")
+  tags             Json      @default("[]")
+  embedding        Unsupported("vector(1536)")?
+  createdAt        DateTime  @default(now())
+  reviewedAt       DateTime?
+  archivedAt       DateTime?
+
+  audits           ClassificationAudit[]
+  spawnedActions   Action[]  @relation("InboxToAction")
+  note             Note?     @relation("InboxToNote")
+
+  @@index([userId, status])
+  @@index([userId, createdAt])
+}
+
+model ClassificationAudit {
+  id             String    @id @default(uuid())
+  inboxItemId    String
+  inboxItem      InboxItem @relation(fields: [inboxItemId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  aiCategory     String
+  aiConfidence   Float
+  aiReasoning    String
+  aiModel        String
+  aiProcessedAt  DateTime
+
+  userAction     String?   // agree, disagree, urgent, hide
+  userCorrection Json?
+  userReviewedAt DateTime?
+
+  reviewType     String    // daily_swipe, weekly_review, manual
+  sessionId      String?
+  createdAt      DateTime  @default(now())
+
+  @@index([inboxItemId])
+  @@index([userId, createdAt])
+}
+
+model Note {
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title             String
+  content           String
+  projectId         String?
+  project           Project?  @relation(fields: [projectId], references: [id])
+  areaId            String?
+  area              Area?     @relation(fields: [areaId], references: [id])
+  resourceId        String?
+  resource          Resource? @relation(fields: [resourceId], references: [id])
+  sourceInboxItemId String?   @unique
+  sourceInboxItem   InboxItem? @relation("InboxToNote", fields: [sourceInboxItemId], references: [id])
+  tags              String[]
+  embedding         Unsupported("vector(1536)")?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([areaId])
+}
+
+model Action {
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  description       String
+  status            String    @default("pending") // pending, in_progress, completed, archived
+  priority          String    @default("normal") // urgent, high, normal, low
+  dueDate           DateTime?
+  scheduledFor      DateTime?
+  calendarEventId   String?
+  projectId         String?
+  project           Project?  @relation(fields: [projectId], references: [id])
+  areaId            String?
+  area              Area?     @relation(fields: [areaId], references: [id])
+  objectiveId       String?
+  objective         Objective? @relation(fields: [objectiveId], references: [id])
+  sourceInboxItemId String?
+  sourceInboxItem   InboxItem? @relation("InboxToAction", fields: [sourceInboxItemId], references: [id])
+  completedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([userId, status])
+  @@index([projectId])
+  @@index([dueDate])
+}
+
+model Project {
+  id               String    @id @default(uuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name             String
+  description      String?
+  status           String    @default("active") // active, completed, on_hold, archived
+  oneDriveFolderId String?
+  objectiveId      String?
+  objective        Objective? @relation(fields: [objectiveId], references: [id])
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  notes            Note[]
+  actions          Action[]
+
+  @@index([userId, status])
+}
+
+model Area {
+  id               String    @id @default(uuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name             String
+  description      String?
+  oneDriveFolderId String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  notes            Note[]
+  actions          Action[]
+
+  @@index([userId])
+}
+
+model Resource {
+  id               String    @id @default(uuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name             String
+  description      String?
+  oneDriveFolderId String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  notes            Note[]
+
+  @@index([userId])
+}
+
+model Objective {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  timeframe   String    // yearly, monthly, weekly
+  parentId    String?
+  parent      Objective? @relation("ObjectiveHierarchy", fields: [parentId], references: [id])
+  children    Objective[] @relation("ObjectiveHierarchy")
+  status      String    @default("active") // active, completed, abandoned
+  startDate   DateTime
+  endDate     DateTime
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  actions     Action[]
+  projects    Project[]
+
+  @@index([userId, timeframe])
+  @@index([parentId])
+}
+
+model Conversation {
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title             String
+  model             String    // claude, gpt, gemini
+  messages          Json      @default("[]")
+  summary           String?
+  extractedInsights String[]
+  extractedActions  Json      @default("[]")
+  projectId         String?
+  areaId            String?
+  embedding         Unsupported("vector(1536)")?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model ReviewSession {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type            String    // daily, weekly
+  status          String    @default("in_progress") // in_progress, completed, abandoned
+  currentStep     String?
+  itemsProcessed  Int       @default(0)
+  itemsAgreed     Int       @default(0)
+  itemsDisagreed  Int       @default(0)
+  itemsUrgent     Int       @default(0)
+  itemsHidden     Int       @default(0)
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+  durationSeconds Int?
+
+  @@index([userId, type])
+}
+
+model FailedWebhook {
+  id          String    @id @default(uuid())
+  type        String    // classify, calendar, sync, etc.
+  targetUrl   String
+  payload     Json
+  error       String
+  statusCode  Int?
+  retryCount  Int       @default(0)
+  maxRetries  Int       @default(3)
+  nextRetry   DateTime?
+  status      String    @default("pending") // pending, retrying, failed, succeeded
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  resolvedAt  DateTime?
+
+  @@index([status, nextRetry])
+  @@index([type])
+}
+
+model EmailAccount {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name      String   // Display name (e.g., "Work Email")
+  email     String   // Email address
+  provider  String   // imap, microsoft_oauth, google_oauth
+
+  // IMAP credentials (encrypted)
+  imapHost  String?
+  imapPort  Int?
+  smtpHost  String?
+  smtpPort  Int?
+  username  String?
+  password  String?  // Encrypted with AES-256-GCM
+
+  // OAuth tokens (encrypted)
+  oauthAccessToken  String?
+  oauthRefreshToken String?
+  oauthExpiresAt    DateTime?
+
+  isDefault     Boolean   @default(false)
+  syncStatus    String    @default("idle") // idle, syncing, error
+  lastSyncAt    DateTime?
+  lastSyncError String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model CalendarAccount {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  provider    String   // caldav, microsoft_oauth, google_oauth
+  calendarUrl String?  // For CalDAV
+
+  // OAuth tokens (encrypted)
+  oauthAccessToken  String?
+  oauthRefreshToken String?
+  oauthExpiresAt    DateTime?
+
+  isDefault     Boolean   @default(false)
+  syncStatus    String    @default("idle")
+  lastSyncAt    DateTime?
+  lastSyncError String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}

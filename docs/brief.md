@@ -20,7 +20,7 @@ Knowledge workers today face a fundamental cognitive burden:
 
 1. **Fragmentation:** Information is scattered across Apple Notes, email, Teams messages, photos, to-do apps, and calendar - each a separate "inbox" with no unified view
 2. **Graveyard Effect:** Items are captured but never processed. Notes become burial grounds for ideas. Photos of whiteboards are lost in camera rolls.
-3. **Retrieval Failure:** The user's brain becomes the search engine for their own past work. Finding something from 2 weeks ago requires remembering *where* it was stored.
+3. **Retrieval Failure:** The user's brain becomes the search engine for their own past work. Finding something from 2 weeks ago requires remembering _where_ it was stored.
 4. **Review Avoidance:** Weekly reviews feel heavy and are frequently skipped, leading to inbox bankruptcy and lost commitments.
 5. **Context Switching:** Thinking happens in ChatGPT, organizing in Notion, tasks in Todoist - no single system has full context.
 
@@ -33,12 +33,12 @@ Knowledge workers today face a fundamental cognitive burden:
 
 ### Why Existing Solutions Fall Short
 
-| Solution | Limitation |
-|----------|------------|
-| **Note apps** (Notion, Obsidian) | Require manual organization; no AI triage; no action management |
-| **Task managers** (Todoist, Things) | Focused on tasks only; no knowledge capture; no calendar integration |
-| **Email clients** | Handle one input type; no connection to other captured content |
-| **AI assistants** (ChatGPT) | Conversations are lost; no persistent memory; not connected to your data |
+| Solution                            | Limitation                                                               |
+| ----------------------------------- | ------------------------------------------------------------------------ |
+| **Note apps** (Notion, Obsidian)    | Require manual organization; no AI triage; no action management          |
+| **Task managers** (Todoist, Things) | Focused on tasks only; no knowledge capture; no calendar integration     |
+| **Email clients**                   | Handle one input type; no connection to other captured content           |
+| **AI assistants** (ChatGPT)         | Conversations are lost; no persistent memory; not connected to your data |
 
 ### Urgency
 
@@ -53,6 +53,7 @@ AI capabilities now make this vision achievable. The ability to auto-classify, s
 Bee is a **unified command center** for knowledge work. Everything flows into one inbox, AI processes and classifies it, the user validates with minimal effort, and the system executes actions on their behalf.
 
 **Design Philosophy:**
+
 - **One behavior only:** The user's job is to capture. Everything else is automated.
 - **AI absorbs complexity:** The user never decides "where should this go?" at capture time.
 - **Design for restart:** The system assumes the user will fall off. No guilt, easy restart.
@@ -92,6 +93,7 @@ CREATION MODE (Build Deliverables)
 ### Primary User Segment: Knowledge Workers in Corporate Environments
 
 **Profile:**
+
 - Mid-to-senior level professionals (managers, leads, directors)
 - Work involves producing decisions, presentations, plans, and strategic documents
 - Heavy meeting load with Microsoft Teams
@@ -99,6 +101,7 @@ CREATION MODE (Build Deliverables)
 - Struggle with information overload and follow-up tracking
 
 **Current Behaviors:**
+
 - Capture ideas on paper or Apple Notes
 - Take photos of whiteboards that get lost in camera roll
 - Lose track of action items from meetings
@@ -106,12 +109,14 @@ CREATION MODE (Build Deliverables)
 - Use ChatGPT/Claude for thinking but lose those conversations
 
 **Pain Points:**
+
 - "Where did I put that?"
 - "I know I captured this somewhere..."
 - "I forgot to follow up on that meeting"
 - "Creating this deck means hunting through 5 old projects"
 
 **Goals:**
+
 - Never lose an action item from a meeting
 - Find any past work in seconds
 - Spend less time organizing, more time thinking
@@ -120,12 +125,14 @@ CREATION MODE (Build Deliverables)
 ### Secondary User Segment: Entrepreneurs & Solopreneurs
 
 **Profile:**
+
 - Running their own business or side projects
 - Wear multiple hats (CEO, marketer, product, sales)
 - Need to manage personal and professional in one system
 - Value automation and AI leverage
 
 **Specific Needs:**
+
 - No separation between "work" and "personal" thinking
 - Need system that handles both domains seamlessly
 - Appreciate tools that save time on administrative tasks
@@ -220,6 +227,7 @@ CREATION MODE (Build Deliverables)
 ### MVP Success Criteria
 
 The MVP is successful if:
+
 1. Hugo uses daily swipe review at least 5 days/week for 4 consecutive weeks
 2. Weekly review is completed every week for 4 consecutive weeks
 3. No action items are lost from meetings (self-reported)
@@ -255,6 +263,7 @@ The MVP is successful if:
 ### Long-term Vision
 
 Bee becomes the **operating system for knowledge work**:
+
 - Every piece of information you encounter flows through it
 - Every decision you make is supported by relevant context
 - Every action you commit to gets executed
@@ -364,6 +373,7 @@ Bee becomes the **operating system for knowledge work**:
 ### A. Research Summary
 
 **Brainstorming Session Insights:**
+
 - Capture isn't the friction - retrieval is (the graveyard problem)
 - One behavior only: capture. Everything else automated.
 - Design for restart, not perfection
@@ -371,6 +381,7 @@ Bee becomes the **operating system for knowledge work**:
 - Progressive trust model for AI autonomy
 
 **External Research (Second Brain Article):**
+
 - "Bouncer" concept for AI confidence thresholds
 - "Fix Button" for quick corrections
 - Safe behavior when uncertain (don't guess)
@@ -379,6 +390,7 @@ Bee becomes the **operating system for knowledge work**:
 ### B. Stakeholder Input
 
 Primary stakeholder: Hugo (initial user and developer)
+
 - Heavy Microsoft Teams user
 - Produces decisions, slides, plans as primary outputs
 - Currently uses paper + Apple Notes for capture

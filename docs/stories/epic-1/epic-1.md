@@ -2,13 +2,13 @@
 
 ## Epic Overview
 
-| Field | Value |
-|-------|-------|
-| **Epic ID** | E1 |
-| **Epic Name** | Foundation & Infrastructure |
-| **Priority** | P0 - Critical Path |
-| **Estimated Stories** | 5 |
-| **Dependencies** | None (First Epic) |
+| Field                 | Value                       |
+| --------------------- | --------------------------- |
+| **Epic ID**           | E1                          |
+| **Epic Name**         | Foundation & Infrastructure |
+| **Priority**          | P0 - Critical Path          |
+| **Estimated Stories** | 5                           |
+| **Dependencies**      | None (First Epic)           |
 
 ## Goal Statement
 
@@ -31,13 +31,13 @@ Establish project setup, authentication, database schema, and verify connections
 
 ## Stories in This Epic
 
-| Story ID | Title | Priority | Dependencies |
-|----------|-------|----------|--------------|
-| [1.1](story-1.1.md) | Project Setup & Development Environment | P0 | None |
-| [1.2](story-1.2.md) | Database Setup & Core Schema | P0 | 1.1 |
-| [1.3](story-1.3.md) | Authentication with Microsoft | P0 | 1.1, 1.2 |
-| [1.4](story-1.4.md) | Basic UI Shell & Navigation | P1 | 1.1, 1.3 |
-| [1.5](story-1.5.md) | External Service Connection Verification | P1 | 1.1, 1.2, 1.3 |
+| Story ID            | Title                                    | Priority | Dependencies  |
+| ------------------- | ---------------------------------------- | -------- | ------------- |
+| [1.1](story-1.1.md) | Project Setup & Development Environment  | P0       | None          |
+| [1.2](story-1.2.md) | Database Setup & Core Schema             | P0       | 1.1           |
+| [1.3](story-1.3.md) | Authentication with Microsoft            | P0       | 1.1, 1.2      |
+| [1.4](story-1.4.md) | Basic UI Shell & Navigation              | P1       | 1.1, 1.3      |
+| [1.5](story-1.5.md) | External Service Connection Verification | P1       | 1.1, 1.2, 1.3 |
 
 ## Architecture References
 
@@ -50,11 +50,11 @@ See [architecture.md](../../architecture.md) for full technical details.
 
 ## Risks & Mitigations
 
-| Risk | Probability | Impact | Mitigation |
-|------|-------------|--------|------------|
-| Microsoft OAuth scope issues | Medium | High | Test OAuth early in Story 1.3, document required scopes |
-| Supabase pgvector compatibility | Low | Medium | Verify extension availability during Story 1.2 |
-| n8n webhook auth complexity | Medium | Medium | Use simple shared secret auth initially |
+| Risk                            | Probability | Impact | Mitigation                                              |
+| ------------------------------- | ----------- | ------ | ------------------------------------------------------- |
+| Microsoft OAuth scope issues    | Medium      | High   | Test OAuth early in Story 1.3, document required scopes |
+| Supabase pgvector compatibility | Low         | Medium | Verify extension availability during Story 1.2          |
+| n8n webhook auth complexity     | Medium      | Medium | Use simple shared secret auth initially                 |
 
 ## Definition of Done (Epic Level)
 

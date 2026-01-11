@@ -11,6 +11,7 @@ This unified approach combines what would traditionally be separate backend and 
 **N/A - Greenfield project with existing infrastructure leverage**
 
 While this is a new application, the architecture will integrate with Hugo's existing VPS infrastructure:
+
 - **n8n** - Already running, available for workflow automation and integrations
 - **LibreChat** - Already running, available for AI chat functionality (potentially via MCP)
 
@@ -18,10 +19,11 @@ While this is a new application, the architecture will integrate with Hugo's exi
 
 ### Change Log
 
-| Date | Version | Description | Author |
-|------|---------|-------------|--------|
-| 2026-01-11 | 0.1 | Initial architecture document | Winston (Architect) |
-| 2026-01-11 | 0.2 | Added token refresh and webhook failure handling | Winston (Architect) |
+| Date       | Version | Description                                                    | Author              |
+| ---------- | ------- | -------------------------------------------------------------- | ------------------- |
+| 2026-01-11 | 0.1     | Initial architecture document                                  | Winston (Architect) |
+| 2026-01-11 | 0.2     | Added token refresh and webhook failure handling               | Winston (Architect) |
+| 2026-01-11 | 0.3     | Hybrid multi-provider email/calendar (IMAP/CalDAV + OAuth)     | Winston (Architect) |
 
 ---
 
@@ -29,7 +31,13 @@ While this is a new application, the architecture will integrate with Hugo's exi
 
 ### Technical Summary
 
-Bee is a **Next.js fullstack application** self-hosted on Hugo's VPS alongside the existing **n8n** and **LibreChat** instances. The frontend uses React with shadcn/ui for a mobile-first responsive experience optimized for swipe gestures. The backend uses Next.js API routes with Prisma ORM connecting to **Supabase** (PostgreSQL with pgvector built-in) for combined relational data and semantic search. External integrations (Microsoft Graph for email/calendar/OneDrive) are orchestrated through n8n workflows. This architecture consolidates everything on existing infrastructure, minimizing costs and operational complexity.
+Bee is a **Next.js fullstack application** self-hosted on Hugo's VPS alongside the existing **n8n** and **LibreChat** instances. The frontend uses React with shadcn/ui for a mobile-first responsive experience optimized for swipe gestures. The backend uses Next.js API routes with Prisma ORM connecting to **Supabase** (PostgreSQL with pgvector built-in) for combined relational data and semantic search.
+
+**Email and Calendar Integration** uses a **hybrid provider-agnostic approach**:
+- **Default (IMAP/CalDAV):** Works with any email provider (Gmail, Outlook, Yahoo, corporate accounts) using standard protocols. Users provide app-specific passwords - no OAuth app registration required.
+- **Optional OAuth:** Power users who can register OAuth apps get richer API access (Microsoft Graph, Google APIs).
+
+This design removes provider lock-in and works with enterprise accounts where the user lacks admin access. External integrations are orchestrated through n8n workflows. This architecture consolidates everything on existing infrastructure, minimizing costs and operational complexity.
 
 ### Platform and Infrastructure Choice
 
@@ -69,8 +77,14 @@ graph TB
         Storage[Supabase Storage<br/>Images/Files]
     end
 
-    subgraph "External APIs"
-        MSFT[Microsoft Graph<br/>Email/Calendar/OneDrive]
+    subgraph "Email/Calendar Providers"
+        IMAP[IMAP/SMTP<br/>Any Email Provider]
+        CalDAV[CalDAV<br/>Any Calendar Provider]
+        MSFT[Microsoft Graph<br/>OAuth - Optional]
+        Google[Google APIs<br/>OAuth - Optional]
+    end
+
+    subgraph "AI APIs"
         LLM[LLM APIs<br/>Claude/GPT/Gemini]
     end
 
@@ -83,7 +97,10 @@ graph TB
     App --> N8N
     App --> LibreChat
 
+    N8N --> IMAP
+    N8N --> CalDAV
     N8N --> MSFT
+    N8N --> Google
     N8N --> LLM
     LibreChat --> LLM
 ```
@@ -119,52 +136,82 @@ Hugo's VPS
 
 This is the **definitive technology selection** for Bee. All development must use these exact technologies.
 
-| Category | Technology | Version | Purpose | Rationale |
-|----------|------------|---------|---------|-----------|
-| Frontend Language | TypeScript | 5.x | Type-safe JavaScript | Catch errors at compile time, better DX |
-| Frontend Framework | Next.js | 14.x (App Router) | React framework with SSR/SSG | Industry standard, excellent DX |
-| UI Component Library | shadcn/ui | latest | Accessible component primitives | Copy-paste components, full control |
-| State Management | Zustand | 4.x | Lightweight global state | Simple API, no boilerplate |
-| CSS Framework | Tailwind CSS | 3.x | Utility-first styling | Rapid development, consistent design |
-| Backend Language | TypeScript | 5.x | Type-safe Node.js | Shared types frontend/backend |
-| Backend Framework | Next.js API Routes | 14.x | Serverless-style API endpoints | Colocated with frontend |
-| API Style | REST + tRPC | tRPC 11.x | Type-safe API layer | End-to-end type safety |
-| Database | Supabase (PostgreSQL) | 15.x | Relational database with vectors | Built-in pgvector, auth, storage |
-| ORM | Prisma | 5.x | Type-safe database access | Excellent DX, migrations |
-| Vector Search | pgvector (via Supabase) | 0.5.x | Semantic search embeddings | Native PostgreSQL extension |
-| File Storage | Supabase Storage | - | Image/file uploads | Integrated with Supabase |
-| Authentication | NextAuth.js | 5.x (Auth.js) | OAuth + session management | Microsoft provider built-in |
-| Frontend Testing | Vitest | 1.x | Unit/component tests | Fast, Jest-compatible API |
-| Backend Testing | Vitest | 1.x | API route tests | Same tool for entire codebase |
-| E2E Testing | Playwright | 1.x | Browser automation tests | Cross-browser, good mobile emulation |
-| Build Tool | Next.js (Turbopack) | 14.x | Development bundling | Built into Next.js, fast HMR |
-| Process Manager | PM2 | 5.x | Node.js process management | Auto-restart, clustering, logs |
-| Reverse Proxy | Nginx | 1.24.x | SSL, routing, load balancing | Industry standard |
-| CI/CD | GitHub Actions | - | Automated testing/deployment | Free, good integration |
-| Monitoring | Sentry | 7.x | Error tracking | Free tier, excellent context |
-| Logging | Pino | 8.x | Structured logging | Fast, JSON output |
-| Gestures | @use-gesture/react | 10.x | Touch/swipe handling | React-native-like gestures |
-| Animations | Framer Motion | 11.x | Card animations | Smooth swipe animations |
+| Category             | Technology              | Version           | Purpose                          | Rationale                               |
+| -------------------- | ----------------------- | ----------------- | -------------------------------- | --------------------------------------- |
+| Frontend Language    | TypeScript              | 5.x               | Type-safe JavaScript             | Catch errors at compile time, better DX |
+| Frontend Framework   | Next.js                 | 14.x (App Router) | React framework with SSR/SSG     | Industry standard, excellent DX         |
+| UI Component Library | shadcn/ui               | latest            | Accessible component primitives  | Copy-paste components, full control     |
+| State Management     | Zustand                 | 4.x               | Lightweight global state         | Simple API, no boilerplate              |
+| CSS Framework        | Tailwind CSS            | 3.x               | Utility-first styling            | Rapid development, consistent design    |
+| Backend Language     | TypeScript              | 5.x               | Type-safe Node.js                | Shared types frontend/backend           |
+| Backend Framework    | Next.js API Routes      | 14.x              | Serverless-style API endpoints   | Colocated with frontend                 |
+| API Style            | REST + tRPC             | tRPC 11.x         | Type-safe API layer              | End-to-end type safety                  |
+| Database             | Supabase (PostgreSQL)   | 15.x              | Relational database with vectors | Built-in pgvector, auth, storage        |
+| ORM                  | Prisma                  | 5.x               | Type-safe database access        | Excellent DX, migrations                |
+| Vector Search        | pgvector (via Supabase) | 0.5.x             | Semantic search embeddings       | Native PostgreSQL extension             |
+| File Storage         | Supabase Storage        | -                 | Image/file uploads               | Integrated with Supabase                |
+| Authentication       | NextAuth.js             | 5.x (Auth.js)     | OAuth + session management       | Microsoft provider built-in             |
+| Frontend Testing     | Vitest                  | 1.x               | Unit/component tests             | Fast, Jest-compatible API               |
+| Backend Testing      | Vitest                  | 1.x               | API route tests                  | Same tool for entire codebase           |
+| E2E Testing          | Playwright              | 1.x               | Browser automation tests         | Cross-browser, good mobile emulation    |
+| Build Tool           | Next.js (Turbopack)     | 14.x              | Development bundling             | Built into Next.js, fast HMR            |
+| Process Manager      | PM2                     | 5.x               | Node.js process management       | Auto-restart, clustering, logs          |
+| Reverse Proxy        | Nginx                   | 1.24.x            | SSL, routing, load balancing     | Industry standard                       |
+| CI/CD                | GitHub Actions          | -                 | Automated testing/deployment     | Free, good integration                  |
+| Monitoring           | Sentry                  | 7.x               | Error tracking                   | Free tier, excellent context            |
+| Logging              | Pino                    | 8.x               | Structured logging               | Fast, JSON output                       |
+| Gestures             | @use-gesture/react      | 10.x              | Touch/swipe handling             | React-native-like gestures              |
+| Animations           | Framer Motion           | 11.x              | Card animations                  | Smooth swipe animations                 |
+| IMAP Client          | imapflow                | 1.x               | Email reading via IMAP           | Modern, Promise-based, well-maintained  |
+| SMTP Client          | nodemailer              | 6.x               | Email sending via SMTP           | Industry standard, battle-tested        |
+| CalDAV Client        | tsdav                   | 2.x               | Calendar via CalDAV              | TypeScript-native, supports all CalDAV  |
+| Encryption           | @node-rs/argon2 + crypto| -                 | Credential encryption            | Secure storage of passwords/tokens      |
 
 ### Key Technology Decisions
 
 **Why tRPC alongside REST?**
+
 - tRPC provides end-to-end type safety for the main app ↔ API communication
 - REST endpoints remain for n8n webhook callbacks (n8n speaks REST, not tRPC)
 
 **Why Zustand over Redux/Context?**
+
 - Minimal boilerplate for a solo project
 - Works well with React Server Components
 - Sufficient for MVP complexity
 
 **Why Prisma with Supabase?**
+
 - Prisma provides type-safe queries and migrations
 - Works seamlessly with Supabase's PostgreSQL
 - Better DX than Supabase's JavaScript client for complex queries
 
 **Why @use-gesture + Framer Motion?**
+
 - Critical for the swipe card UX (FR11-FR15)
 - Provides native-feeling touch interactions on mobile
+
+**Why IMAP/CalDAV as default instead of OAuth APIs?**
+
+- **No app registration required:** Users provide app-specific passwords, not OAuth credentials
+- **Works with enterprise accounts:** Even when user lacks Azure AD/Google Workspace admin access
+- **Provider-agnostic:** Same code works with Gmail, Outlook, Yahoo, corporate email, etc.
+- **Simpler for MVP:** No OAuth flow complexity for basic email/calendar access
+- **Fallback to OAuth:** Power users who CAN register OAuth apps get richer features
+
+**Why imapflow over node-imap?**
+
+- Modern Promise-based API (node-imap is callback-based)
+- Better TypeScript support
+- Active maintenance
+- Built-in IDLE support for real-time updates
+
+**Why tsdav for CalDAV?**
+
+- TypeScript-native with full type definitions
+- Supports all major providers (Google, iCloud, Outlook, Fastmail)
+- Handles CalDAV quirks across providers
+- Well-documented and actively maintained
 
 ---
 
@@ -190,13 +237,101 @@ interface User {
 interface UserSettings {
   confidenceThreshold: number; // Default 0.6
   autoArchiveDays: number; // Default 15
-  defaultModel: 'claude' | 'gpt' | 'gemini';
+  defaultModel: "claude" | "gpt" | "gemini";
   weeklyReviewDay: number; // 0=Sunday, 6=Saturday
 }
 ```
 
 **Relationships:**
-- Has many `InboxItem`, `Note`, `Action`, `Project`, `Area`, `Resource`, `Conversation`
+
+- Has many `InboxItem`, `Note`, `Action`, `Project`, `Area`, `Resource`, `Conversation`, `EmailAccount`, `CalendarAccount`
+
+### EmailAccount
+
+**Purpose:** Stores email provider credentials. Supports both IMAP/SMTP (default) and OAuth (optional) connections.
+
+```typescript
+interface EmailAccount {
+  id: string;
+  userId: string;
+  name: string; // User-friendly name, e.g., "Work Gmail"
+  email: string;
+  provider: "imap" | "microsoft_oauth" | "google_oauth";
+  isDefault: boolean;
+
+  // IMAP/SMTP credentials (encrypted)
+  imapHost?: string;
+  imapPort?: number;
+  smtpHost?: string;
+  smtpPort?: number;
+  username?: string;
+  password?: string; // App-specific password, encrypted
+
+  // OAuth credentials (encrypted)
+  oauthAccessToken?: string;
+  oauthRefreshToken?: string;
+  oauthExpiresAt?: Date;
+
+  // Sync state
+  lastSyncAt?: Date;
+  syncStatus: "idle" | "syncing" | "error";
+  syncError?: string;
+
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
+
+**Provider-Specific Configuration:**
+
+| Provider | Auth Method | Required Fields |
+|----------|-------------|-----------------|
+| IMAP (Gmail) | App Password | imapHost, imapPort, smtpHost, smtpPort, username, password |
+| IMAP (Outlook) | App Password | imapHost, imapPort, smtpHost, smtpPort, username, password |
+| Microsoft OAuth | OAuth 2.0 | oauthAccessToken, oauthRefreshToken |
+| Google OAuth | OAuth 2.0 | oauthAccessToken, oauthRefreshToken |
+
+### CalendarAccount
+
+**Purpose:** Stores calendar provider credentials. Supports CalDAV (default) and OAuth (optional).
+
+```typescript
+interface CalendarAccount {
+  id: string;
+  userId: string;
+  name: string; // User-friendly name, e.g., "Personal Calendar"
+  provider: "caldav" | "microsoft_oauth" | "google_oauth";
+  isDefault: boolean;
+
+  // CalDAV credentials (encrypted)
+  caldavUrl?: string;
+  username?: string;
+  password?: string; // App-specific password, encrypted
+
+  // OAuth credentials (encrypted)
+  oauthAccessToken?: string;
+  oauthRefreshToken?: string;
+  oauthExpiresAt?: Date;
+
+  // Sync state
+  lastSyncAt?: Date;
+  syncStatus: "idle" | "syncing" | "error";
+  syncError?: string;
+
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
+
+**Provider-Specific Configuration:**
+
+| Provider | Auth Method | Required Fields | CalDAV URL Example |
+|----------|-------------|-----------------|-------------------|
+| Google CalDAV | App Password | caldavUrl, username, password | `https://apidata.googleusercontent.com/caldav/v2/` |
+| iCloud CalDAV | App Password | caldavUrl, username, password | `https://caldav.icloud.com/` |
+| Microsoft CalDAV | App Password | caldavUrl, username, password | `https://outlook.office365.com/caldav/` |
+| Microsoft OAuth | OAuth 2.0 | oauthAccessToken, oauthRefreshToken | N/A (uses Graph API) |
+| Google OAuth | OAuth 2.0 | oauthAccessToken, oauthRefreshToken | N/A (uses Calendar API) |
 
 ### InboxItem
 
@@ -206,11 +341,11 @@ interface UserSettings {
 interface InboxItem {
   id: string;
   userId: string;
-  type: 'manual' | 'image' | 'voice' | 'email' | 'forward';
+  type: "manual" | "image" | "voice" | "email" | "forward";
   content: string;
   mediaUrl?: string;
   source: string;
-  status: 'pending' | 'processing' | 'reviewed' | 'archived';
+  status: "pending" | "processing" | "reviewed" | "archived";
   aiClassification?: AIClassification;
   extractedActions: ActionCandidate[];
   tags: Tag[];
@@ -220,7 +355,7 @@ interface InboxItem {
 }
 
 interface AIClassification {
-  category: 'action' | 'note' | 'reference' | 'meeting' | 'unknown';
+  category: "action" | "note" | "reference" | "meeting" | "unknown";
   confidence: number; // 0.0 - 1.0
   reasoning: string;
   suggestedProject?: string;
@@ -239,7 +374,7 @@ interface ActionCandidate {
 }
 
 interface Tag {
-  type: 'topic' | 'person' | 'project' | 'date';
+  type: "topic" | "person" | "project" | "date";
   value: string;
   confidence: number;
 }
@@ -274,8 +409,8 @@ interface Action {
   id: string;
   userId: string;
   description: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'archived';
-  priority: 'urgent' | 'high' | 'normal' | 'low';
+  status: "pending" | "in_progress" | "completed" | "archived";
+  priority: "urgent" | "high" | "normal" | "low";
   dueDate?: Date;
   scheduledFor?: Date;
   calendarEventId?: string;
@@ -299,7 +434,7 @@ interface Project {
   userId: string;
   name: string;
   description?: string;
-  status: 'active' | 'completed' | 'on_hold' | 'archived';
+  status: "active" | "completed" | "on_hold" | "archived";
   oneDriveFolderId?: string;
   objectiveId?: string;
   createdAt: Date;
@@ -337,9 +472,9 @@ interface Objective {
   userId: string;
   title: string;
   description?: string;
-  timeframe: 'yearly' | 'monthly' | 'weekly';
+  timeframe: "yearly" | "monthly" | "weekly";
   parentId?: string;
-  status: 'active' | 'completed' | 'abandoned';
+  status: "active" | "completed" | "abandoned";
   startDate: Date;
   endDate: Date;
   createdAt: Date;
@@ -356,7 +491,7 @@ interface Conversation {
   id: string;
   userId: string;
   title: string;
-  model: 'claude' | 'gpt' | 'gemini';
+  model: "claude" | "gpt" | "gemini";
   messages: ConversationMessage[];
   summary?: string;
   extractedInsights: string[];
@@ -369,7 +504,7 @@ interface Conversation {
 
 interface ConversationMessage {
   id: string;
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
   timestamp: Date;
 }
@@ -383,8 +518,8 @@ interface ConversationMessage {
 interface ReviewSession {
   id: string;
   userId: string;
-  type: 'daily' | 'weekly';
-  status: 'in_progress' | 'completed' | 'abandoned';
+  type: "daily" | "weekly";
+  status: "in_progress" | "completed" | "abandoned";
   currentStep?: string;
   itemsProcessed: number;
   itemsAgreed: number;
@@ -408,14 +543,14 @@ interface ClassificationAudit {
   userId: string;
 
   // AI's original decision
-  aiCategory: 'action' | 'note' | 'reference' | 'meeting' | 'unknown';
+  aiCategory: "action" | "note" | "reference" | "meeting" | "unknown";
   aiConfidence: number;
   aiReasoning: string;
   aiModel: string;
   aiProcessedAt: Date;
 
   // User's response
-  userAction: 'agree' | 'disagree' | 'urgent' | 'hide' | null;
+  userAction: "agree" | "disagree" | "urgent" | "hide" | null;
   userCorrection?: {
     correctedCategory?: string;
     correctedProject?: string;
@@ -425,7 +560,7 @@ interface ClassificationAudit {
   userReviewedAt?: Date;
 
   // Metadata
-  reviewType: 'daily_swipe' | 'weekly_review' | 'manual';
+  reviewType: "daily_swipe" | "weekly_review" | "manual";
   sessionId?: string;
   createdAt: Date;
 }
@@ -496,11 +631,13 @@ const appRouter = router({
 const inboxRouter = router({
   // Queries
   list: protectedProcedure
-    .input(z.object({
-      status: z.enum(['pending', 'processing', 'reviewed', 'archived']).optional(),
-      limit: z.number().default(50),
-      cursor: z.string().optional(),
-    }))
+    .input(
+      z.object({
+        status: z.enum(["pending", "processing", "reviewed", "archived"]).optional(),
+        limit: z.number().default(50),
+        cursor: z.string().optional(),
+      })
+    )
     .query(/* returns paginated inbox items */),
 
   getById: protectedProcedure
@@ -508,39 +645,44 @@ const inboxRouter = router({
     .query(/* returns single inbox item with classification */),
 
   getReviewQueue: protectedProcedure
-    .input(z.object({
-      queue: z.enum(['needs_review', 'disagreements', 'receipts']),
-    }))
+    .input(
+      z.object({
+        queue: z.enum(["needs_review", "disagreements", "receipts"]),
+      })
+    )
     .query(/* returns items for weekly review */),
 
   // Mutations
   capture: protectedProcedure
-    .input(z.object({
-      type: z.enum(['manual', 'image', 'voice']),
-      content: z.string(),
-      mediaUrl: z.string().optional(),
-    }))
+    .input(
+      z.object({
+        type: z.enum(["manual", "image", "voice"]),
+        content: z.string(),
+        mediaUrl: z.string().optional(),
+      })
+    )
     .mutation(/* creates inbox item, triggers AI processing */),
 
   swipe: protectedProcedure
-    .input(z.object({
-      id: z.string(),
-      action: z.enum(['agree', 'disagree', 'urgent', 'hide']),
-      correction: z.object({
-        category: z.string().optional(),
-        projectId: z.string().optional(),
-        areaId: z.string().optional(),
-        feedback: z.string().optional(),
-      }).optional(),
-    }))
+    .input(
+      z.object({
+        id: z.string(),
+        action: z.enum(["agree", "disagree", "urgent", "hide"]),
+        correction: z
+          .object({
+            category: z.string().optional(),
+            projectId: z.string().optional(),
+            areaId: z.string().optional(),
+            feedback: z.string().optional(),
+          })
+          .optional(),
+      })
+    )
     .mutation(/* processes swipe, creates audit record */),
 
-  archive: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(/* archives item */),
+  archive: protectedProcedure.input(z.object({ id: z.string() })).mutation(/* archives item */),
 
-  declareBankruptcy: protectedProcedure
-    .mutation(/* bulk archives all pending items */),
+  declareBankruptcy: protectedProcedure.mutation(/* bulk archives all pending items */),
 });
 ```
 
@@ -549,41 +691,49 @@ const inboxRouter = router({
 ```typescript
 const actionsRouter = router({
   list: protectedProcedure
-    .input(z.object({
-      status: z.enum(['pending', 'in_progress', 'completed', 'archived']).optional(),
-      projectId: z.string().optional(),
-      areaId: z.string().optional(),
-      priority: z.enum(['urgent', 'high', 'normal', 'low']).optional(),
-    }))
+    .input(
+      z.object({
+        status: z.enum(["pending", "in_progress", "completed", "archived"]).optional(),
+        projectId: z.string().optional(),
+        areaId: z.string().optional(),
+        priority: z.enum(["urgent", "high", "normal", "low"]).optional(),
+      })
+    )
     .query(/* returns filtered actions */),
 
   create: protectedProcedure
-    .input(z.object({
-      description: z.string(),
-      priority: z.enum(['urgent', 'high', 'normal', 'low']).default('normal'),
-      dueDate: z.date().optional(),
-      projectId: z.string().optional(),
-      areaId: z.string().optional(),
-      objectiveId: z.string().optional(),
-    }))
+    .input(
+      z.object({
+        description: z.string(),
+        priority: z.enum(["urgent", "high", "normal", "low"]).default("normal"),
+        dueDate: z.date().optional(),
+        projectId: z.string().optional(),
+        areaId: z.string().optional(),
+        objectiveId: z.string().optional(),
+      })
+    )
     .mutation(/* creates action */),
 
   update: protectedProcedure
-    .input(z.object({
-      id: z.string(),
-      description: z.string().optional(),
-      status: z.enum(['pending', 'in_progress', 'completed', 'archived']).optional(),
-      priority: z.enum(['urgent', 'high', 'normal', 'low']).optional(),
-      // ... other fields
-    }))
+    .input(
+      z.object({
+        id: z.string(),
+        description: z.string().optional(),
+        status: z.enum(["pending", "in_progress", "completed", "archived"]).optional(),
+        priority: z.enum(["urgent", "high", "normal", "low"]).optional(),
+        // ... other fields
+      })
+    )
     .mutation(/* updates action */),
 
   scheduleTimeBlock: protectedProcedure
-    .input(z.object({
-      id: z.string(),
-      startTime: z.date(),
-      duration: z.number(), // minutes
-    }))
+    .input(
+      z.object({
+        id: z.string(),
+        startTime: z.date(),
+        duration: z.number(), // minutes
+      })
+    )
     .mutation(/* creates calendar event via n8n */),
 });
 ```
@@ -593,20 +743,24 @@ const actionsRouter = router({
 ```typescript
 const searchRouter = router({
   semantic: protectedProcedure
-    .input(z.object({
-      query: z.string(),
-      types: z.array(z.enum(['note', 'action', 'conversation', 'inbox'])).optional(),
-      projectId: z.string().optional(),
-      areaId: z.string().optional(),
-      limit: z.number().default(20),
-    }))
+    .input(
+      z.object({
+        query: z.string(),
+        types: z.array(z.enum(["note", "action", "conversation", "inbox"])).optional(),
+        projectId: z.string().optional(),
+        areaId: z.string().optional(),
+        limit: z.number().default(20),
+      })
+    )
     .query(/* vector similarity search across all content */),
 
   keyword: protectedProcedure
-    .input(z.object({
-      query: z.string(),
-      // ... filters
-    }))
+    .input(
+      z.object({
+        query: z.string(),
+        // ... filters
+      })
+    )
     .query(/* full-text search */),
 });
 ```
@@ -616,20 +770,20 @@ const searchRouter = router({
 ```typescript
 const reviewRouter = router({
   startSession: protectedProcedure
-    .input(z.object({
-      type: z.enum(['daily', 'weekly']),
-    }))
+    .input(
+      z.object({
+        type: z.enum(["daily", "weekly"]),
+      })
+    )
     .mutation(/* creates review session */),
 
-  getCurrentSession: protectedProcedure
-    .query(/* returns active session if exists */),
+  getCurrentSession: protectedProcedure.query(/* returns active session if exists */),
 
   completeSession: protectedProcedure
     .input(z.object({ sessionId: z.string() }))
     .mutation(/* marks session complete, calculates stats */),
 
-  getWeeklyStats: protectedProcedure
-    .query(/* returns calendar summary, queue counts */),
+  getWeeklyStats: protectedProcedure.query(/* returns calendar summary, queue counts */),
 });
 ```
 
@@ -688,6 +842,7 @@ Response:
 **Responsibility:** Manages the unified inbox - capture, processing queue, status transitions.
 
 **Key Interfaces:**
+
 - `capture(input: CaptureInput): Promise<InboxItem>` - Create new inbox item
 - `triggerClassification(itemId: string): Promise<void>` - Send to n8n for AI processing
 - `updateClassification(itemId: string, classification: AIClassification): Promise<void>`
@@ -702,12 +857,14 @@ Response:
 **Responsibility:** Handles failed webhook retries with exponential backoff. Ensures no webhook calls are silently lost.
 
 **Key Interfaces:**
+
 - `callWithRetry(type: string, url: string, payload: object): Promise<Response>` - Call webhook with automatic retry
 - `recordFailure(type: string, url: string, payload: object, error: string): Promise<FailedWebhook>` - Record failed webhook
 - `retryPending(): Promise<void>` - Process pending retries (called by cron/scheduler)
 - `getFailedWebhooks(status?: string): Promise<FailedWebhook[]>` - List failed webhooks for monitoring
 
 **Retry Strategy:**
+
 - Exponential backoff: 1min → 5min → 15min (3 retries max)
 - After max retries: status = 'failed', alert sent to monitoring
 - Successful retry: status = 'succeeded', resolvedAt set
@@ -719,6 +876,7 @@ Response:
 **Responsibility:** Handles AI classification logic, confidence routing, audit trail.
 
 **Key Interfaces:**
+
 - `classify(content: string, context: ClassificationContext): Promise<AIClassification>`
 - `extractActions(content: string): Promise<ActionCandidate[]>`
 - `recordAudit(audit: ClassificationAudit): Promise<void>`
@@ -731,28 +889,95 @@ Response:
 **Responsibility:** Semantic and keyword search across all content.
 
 **Key Interfaces:**
+
 - `semanticSearch(query: string, filters: SearchFilters): Promise<SearchResult[]>`
 - `generateEmbedding(text: string): Promise<number[]>`
 - `indexItem(item: Searchable): Promise<void>`
 
 **Dependencies:** Supabase pgvector, embedding model (via n8n/LLM)
 
-#### CalendarService
+#### EmailService
 
-**Responsibility:** Calendar integration via Microsoft Graph (through n8n).
+**Responsibility:** Provider-agnostic email operations. Abstracts IMAP/OAuth differences.
 
 **Key Interfaces:**
-- `getEvents(start: Date, end: Date): Promise<CalendarEvent[]>`
-- `createTimeBlock(action: Action, slot: TimeSlot): Promise<string>` - Returns event ID
-- `getWeeklySummary(): Promise<CalendarSummary>`
 
-**Dependencies:** n8n (Microsoft Graph workflows)
+- `fetchEmails(accountId: string, options: FetchOptions): Promise<Email[]>`
+- `sendEmail(accountId: string, email: EmailDraft): Promise<void>`
+- `markAsRead(accountId: string, emailId: string): Promise<void>`
+- `getUnreadCount(accountId: string): Promise<number>`
+
+**Provider Strategy:**
+
+```typescript
+// Simplified provider abstraction
+interface EmailProvider {
+  fetchEmails(options: FetchOptions): Promise<Email[]>;
+  sendEmail(email: EmailDraft): Promise<void>;
+}
+
+class ImapEmailProvider implements EmailProvider {
+  constructor(private config: ImapConfig) {}
+  // Uses imapflow + nodemailer
+}
+
+class MicrosoftOAuthEmailProvider implements EmailProvider {
+  constructor(private tokens: OAuthTokens) {}
+  // Uses Microsoft Graph API
+}
+
+class GoogleOAuthEmailProvider implements EmailProvider {
+  constructor(private tokens: OAuthTokens) {}
+  // Uses Gmail API
+}
+```
+
+**Dependencies:** imapflow, nodemailer, n8n (for OAuth providers)
+
+#### CalendarService
+
+**Responsibility:** Provider-agnostic calendar operations. Abstracts CalDAV/OAuth differences.
+
+**Key Interfaces:**
+
+- `getEvents(accountId: string, start: Date, end: Date): Promise<CalendarEvent[]>`
+- `createEvent(accountId: string, event: CalendarEventInput): Promise<string>` - Returns event ID
+- `updateEvent(accountId: string, eventId: string, updates: Partial<CalendarEventInput>): Promise<void>`
+- `deleteEvent(accountId: string, eventId: string): Promise<void>`
+- `getWeeklySummary(accountId: string): Promise<CalendarSummary>`
+
+**Provider Strategy:**
+
+```typescript
+interface CalendarProvider {
+  getEvents(start: Date, end: Date): Promise<CalendarEvent[]>;
+  createEvent(event: CalendarEventInput): Promise<string>;
+}
+
+class CalDavCalendarProvider implements CalendarProvider {
+  constructor(private config: CalDavConfig) {}
+  // Uses tsdav library
+}
+
+class MicrosoftOAuthCalendarProvider implements CalendarProvider {
+  constructor(private tokens: OAuthTokens) {}
+  // Uses Microsoft Graph API
+}
+
+class GoogleOAuthCalendarProvider implements CalendarProvider {
+  constructor(private tokens: OAuthTokens) {}
+  // Uses Google Calendar API
+}
+```
+
+**Dependencies:** tsdav, n8n (for OAuth providers)
 
 #### ReviewService
 
 **Responsibility:** Daily/weekly review session management.
 
 **Key Interfaces:**
+
 - `startSession(type: 'daily' | 'weekly'): Promise<ReviewSession>`
 - `getNextItem(sessionId: string): Promise<InboxItem | null>`
 - `recordSwipe(sessionId: string, itemId: string, action: SwipeAction): Promise<void>`
@@ -767,6 +992,7 @@ Response:
 **Responsibility:** Swipeable card for daily review with gesture handling.
 
 **Key Interfaces:**
+
 - Props: `item: InboxItem`, `onSwipe: (action: SwipeAction) => void`
 - Gestures: right (agree), left (disagree), up (urgent), down (hide)
 
@@ -777,6 +1003,7 @@ Response:
 **Responsibility:** Daily swipe review experience with card stack.
 
 **Key Interfaces:**
+
 - State: current item, progress, session stats
 - Actions: swipe, undo, complete session
 
@@ -787,6 +1014,7 @@ Response:
 **Responsibility:** Quick capture overlay accessible from any screen.
 
 **Key Interfaces:**
+
 - Props: `onClose: () => void`
 - Inputs: text, camera, voice recording
 
@@ -797,6 +1025,7 @@ Response:
 **Responsibility:** Step-by-step weekly review flow.
 
 **Key Interfaces:**
+
 - Steps: Objectives → Priorities → Actions → Inbox
 - State: current step, completion status per step
 
@@ -859,22 +1088,90 @@ graph TB
 
 ## External APIs
 
-### Microsoft Graph API
+### Email Integration (Multi-Provider)
 
-- **Purpose:** Email, Calendar, OneDrive integration
+Bee supports multiple email providers through a unified interface. IMAP/SMTP is the default, with optional OAuth for enhanced features.
+
+#### IMAP/SMTP (Default - Any Provider)
+
+- **Purpose:** Read and send emails from any provider
+- **Protocol:** IMAP for reading, SMTP for sending
+- **Authentication:** Username + App-specific password
+
+**Common Provider Settings:**
+
+| Provider | IMAP Host | IMAP Port | SMTP Host | SMTP Port |
+|----------|-----------|-----------|-----------|-----------|
+| Gmail | imap.gmail.com | 993 (SSL) | smtp.gmail.com | 587 (TLS) |
+| Outlook/Hotmail | outlook.office365.com | 993 (SSL) | smtp.office365.com | 587 (TLS) |
+| Yahoo | imap.mail.yahoo.com | 993 (SSL) | smtp.mail.yahoo.com | 587 (TLS) |
+| iCloud | imap.mail.me.com | 993 (SSL) | smtp.mail.me.com | 587 (TLS) |
+
+**App Password Setup (per provider):**
+
+- **Gmail:** Google Account → Security → 2-Step Verification → App passwords
+- **Outlook:** Microsoft Account → Security → App passwords (requires 2FA)
+- **Yahoo:** Account Security → Generate app password
+
+**Integration via n8n:**
+
+```yaml
+# n8n IMAP workflow
+Trigger: Webhook from Bee app
+Action: IMAP node fetches new emails
+Output: Parsed email data returned to Bee
+```
+
+#### Microsoft Graph API (Optional OAuth)
+
+- **Purpose:** Enhanced Outlook/Calendar/OneDrive integration
 - **Documentation:** https://docs.microsoft.com/en-us/graph/
-- **Base URL:** https://graph.microsoft.com/v1.0
-- **Authentication:** OAuth 2.0 with refresh tokens (via NextAuth.js)
+- **When to use:** User has registered an OAuth app (personal or work account with admin access)
 - **Rate Limits:** 10,000 requests per 10 minutes per app
 
-**Key Endpoints Used:**
-- `GET /me/messages` - Fetch emails for inbox
-- `GET /me/calendar/events` - Fetch calendar events
-- `POST /me/calendar/events` - Create time blocks
-- `GET /me/drive/root/children` - List OneDrive folders
-- `POST /me/drive/root:/{path}:/content` - Upload files
+**Key Endpoints:**
 
-**Integration Notes:** All Graph API calls go through n8n workflows to handle token refresh and error retry. The Next.js app calls n8n webhooks, not Graph directly.
+- `GET /me/messages` - Fetch emails
+- `GET /me/calendar/events` - Calendar events
+- `POST /me/calendar/events` - Create time blocks
+- `GET /me/drive/root/children` - OneDrive folders
+
+#### Google APIs (Optional OAuth)
+
+- **Purpose:** Enhanced Gmail/Calendar/Drive integration
+- **Documentation:** https://developers.google.com/gmail/api
+- **When to use:** User has registered an OAuth app in Google Cloud Console
+
+### Calendar Integration (Multi-Provider)
+
+#### CalDAV (Default - Any Provider)
+
+- **Purpose:** Read and create calendar events from any CalDAV-compatible provider
+- **Protocol:** CalDAV (WebDAV extension for calendaring)
+- **Authentication:** Username + App-specific password
+
+**Common Provider CalDAV URLs:**
+
+| Provider | CalDAV URL |
+|----------|------------|
+| Google Calendar | `https://apidata.googleusercontent.com/caldav/v2/{email}/events` |
+| iCloud | `https://caldav.icloud.com/{user-id}/calendars/` |
+| Outlook | `https://outlook.office365.com/caldav/calendar/` |
+| Fastmail | `https://caldav.fastmail.com/dav/calendars/user/{email}/` |
+
+**Integration via n8n:**
+
+```yaml
+# n8n CalDAV workflow
+Trigger: Webhook from Bee app
+Action: HTTP Request to CalDAV endpoint
+Output: Parsed calendar events returned to Bee
+```
+
+#### OAuth Calendar APIs (Optional)
+
+- **Microsoft Graph:** `GET /me/calendar/events`, `POST /me/calendar/events`
+- **Google Calendar API:** `GET /calendars/{id}/events`, `POST /calendars/{id}/events`
 
 ### LLM APIs (via n8n/LibreChat)
 
@@ -884,6 +1181,7 @@ graph TB
 - **Rate Limits:** Vary by provider and tier
 
 **Key Operations:**
+
 - Classification prompt → returns category, confidence, reasoning
 - Action extraction prompt → returns structured action candidates
 - Chat completion → streaming responses via LibreChat
@@ -897,6 +1195,7 @@ graph TB
 - **Authentication:** Webhook secrets in headers
 
 **Key Webhooks:**
+
 - `POST /webhook/classify-inbox-item` - Trigger AI classification
 - `POST /webhook/fetch-calendar` - Get calendar events
 - `POST /webhook/create-calendar-event` - Create time block
@@ -1010,9 +1309,8 @@ model User {
   id                   String    @id @default(uuid())
   email                String    @unique
   name                 String
+  passwordHash         String?   // For email/password login
   avatarUrl            String?
-  microsoftAccessToken String?   // Encrypted
-  microsoftRefreshToken String?  // Encrypted
   settings             Json      @default("{}")
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
@@ -1026,6 +1324,72 @@ model User {
   objectives           Objective[]
   conversations        Conversation[]
   reviewSessions       ReviewSession[]
+  emailAccounts        EmailAccount[]
+  calendarAccounts     CalendarAccount[]
+}
+
+model EmailAccount {
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id])
+  name              String    // User-friendly name
+  email             String
+  provider          String    // imap, microsoft_oauth, google_oauth
+  isDefault         Boolean   @default(false)
+
+  // IMAP/SMTP credentials (encrypted)
+  imapHost          String?
+  imapPort          Int?
+  smtpHost          String?
+  smtpPort          Int?
+  username          String?
+  password          String?   // Encrypted app-specific password
+
+  // OAuth credentials (encrypted)
+  oauthAccessToken  String?
+  oauthRefreshToken String?
+  oauthExpiresAt    DateTime?
+
+  // Sync state
+  lastSyncAt        DateTime?
+  syncStatus        String    @default("idle") // idle, syncing, error
+  syncError         String?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([userId, isDefault])
+}
+
+model CalendarAccount {
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id])
+  name              String    // User-friendly name
+  provider          String    // caldav, microsoft_oauth, google_oauth
+  isDefault         Boolean   @default(false)
+
+  // CalDAV credentials (encrypted)
+  caldavUrl         String?
+  username          String?
+  password          String?   // Encrypted app-specific password
+
+  // OAuth credentials (encrypted)
+  oauthAccessToken  String?
+  oauthRefreshToken String?
+  oauthExpiresAt    DateTime?
+
+  // Sync state
+  lastSyncAt        DateTime?
+  syncStatus        String    @default("idle") // idle, syncing, error
+  syncError         String?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([userId, isDefault])
 }
 
 model InboxItem {
@@ -1418,8 +1782,8 @@ export function SwipeCard({ item, onSwipe }: SwipeCardProps) {
 
 ```typescript
 // stores/reviewStore.ts
-import { create } from 'zustand';
-import type { InboxItem, ReviewSession } from '@/packages/shared/types';
+import { create } from "zustand";
+import type { InboxItem, ReviewSession } from "@/packages/shared/types";
 
 interface ReviewState {
   session: ReviewSession | null;
@@ -1427,8 +1791,8 @@ interface ReviewState {
   currentIndex: number;
 
   // Actions
-  startSession: (type: 'daily' | 'weekly') => Promise<void>;
-  swipe: (action: 'agree' | 'disagree' | 'urgent' | 'hide') => Promise<void>;
+  startSession: (type: "daily" | "weekly") => Promise<void>;
+  swipe: (action: "agree" | "disagree" | "urgent" | "hide") => Promise<void>;
   undo: () => void;
   completeSession: () => Promise<void>;
 }
@@ -1442,7 +1806,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     // tRPC call to start session
     const session = await trpc.review.startSession.mutate({ type });
     const items = await trpc.inbox.getReviewQueue.query({
-      queue: 'needs_review'
+      queue: "needs_review",
     });
     set({ session, items, currentIndex: 0 });
   },
@@ -1597,17 +1961,19 @@ apps/web/src/server/
 
 ```typescript
 // server/routers/inbox.ts
-import { z } from 'zod';
-import { router, protectedProcedure } from '../trpc';
-import { inboxService } from '../services/inbox.service';
+import { z } from "zod";
+import { router, protectedProcedure } from "../trpc";
+import { inboxService } from "../services/inbox.service";
 
 export const inboxRouter = router({
   list: protectedProcedure
-    .input(z.object({
-      status: z.enum(['pending', 'processing', 'reviewed', 'archived']).optional(),
-      limit: z.number().default(50),
-      cursor: z.string().optional(),
-    }))
+    .input(
+      z.object({
+        status: z.enum(["pending", "processing", "reviewed", "archived"]).optional(),
+        limit: z.number().default(50),
+        cursor: z.string().optional(),
+      })
+    )
     .query(async ({ ctx, input }) => {
       return inboxService.list({
         userId: ctx.session.user.id,
@@ -1616,11 +1982,13 @@ export const inboxRouter = router({
     }),
 
   capture: protectedProcedure
-    .input(z.object({
-      type: z.enum(['manual', 'image', 'voice']),
-      content: z.string().min(1),
-      mediaUrl: z.string().optional(),
-    }))
+    .input(
+      z.object({
+        type: z.enum(["manual", "image", "voice"]),
+        content: z.string().min(1),
+        mediaUrl: z.string().optional(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       const item = await inboxService.capture({
         userId: ctx.session.user.id,
@@ -1634,15 +2002,19 @@ export const inboxRouter = router({
     }),
 
   swipe: protectedProcedure
-    .input(z.object({
-      id: z.string(),
-      action: z.enum(['agree', 'disagree', 'urgent', 'hide']),
-      correction: z.object({
-        category: z.string().optional(),
-        projectId: z.string().optional(),
-        feedback: z.string().optional(),
-      }).optional(),
-    }))
+    .input(
+      z.object({
+        id: z.string(),
+        action: z.enum(["agree", "disagree", "urgent", "hide"]),
+        correction: z
+          .object({
+            category: z.string().optional(),
+            projectId: z.string().optional(),
+            feedback: z.string().optional(),
+          })
+          .optional(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       return inboxService.processSwipe({
         userId: ctx.session.user.id,
@@ -1656,8 +2028,8 @@ export const inboxRouter = router({
 
 ```typescript
 // server/services/inbox.service.ts
-import { prisma } from '@/packages/db';
-import { n8nClient } from '../lib/n8n';
+import { prisma } from "@/packages/db";
+import { n8nClient } from "../lib/n8n";
 
 export const inboxService = {
   async list({ userId, status, limit, cursor }: ListParams) {
@@ -1666,7 +2038,7 @@ export const inboxService = {
         userId,
         ...(status && { status }),
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       take: limit,
       ...(cursor && { cursor: { id: cursor }, skip: 1 }),
     });
@@ -1679,8 +2051,8 @@ export const inboxService = {
         type,
         content,
         mediaUrl,
-        source: 'capture',
-        status: 'pending',
+        source: "capture",
+        status: "pending",
       },
     });
   },
@@ -1692,19 +2064,15 @@ export const inboxService = {
 
     await prisma.inboxItem.update({
       where: { id: itemId },
-      data: { status: 'processing' },
+      data: { status: "processing" },
     });
 
     // Call n8n webhook with retry handling
-    await webhookRetryService.callWithRetry(
-      'classify',
-      '/webhook/classify-inbox-item',
-      {
-        itemId,
-        content: item?.content,
-        type: item?.type,
-      }
-    );
+    await webhookRetryService.callWithRetry("classify", "/webhook/classify-inbox-item", {
+      itemId,
+      content: item?.content,
+      type: item?.type,
+    });
   },
 
   async processSwipe({ userId, id, action, correction }: SwipeParams) {
@@ -1712,35 +2080,35 @@ export const inboxService = {
       where: { id, userId },
     });
 
-    if (!item) throw new Error('Item not found');
+    if (!item) throw new Error("Item not found");
 
     // Create audit record
     await prisma.classificationAudit.create({
       data: {
         inboxItemId: id,
         userId,
-        aiCategory: item.aiClassification?.category || 'unknown',
+        aiCategory: item.aiClassification?.category || "unknown",
         aiConfidence: item.aiClassification?.confidence || 0,
-        aiReasoning: item.aiClassification?.reasoning || '',
-        aiModel: item.aiClassification?.modelUsed || 'unknown',
+        aiReasoning: item.aiClassification?.reasoning || "",
+        aiModel: item.aiClassification?.modelUsed || "unknown",
         aiProcessedAt: item.aiClassification?.processedAt || new Date(),
         userAction: action,
         userCorrection: correction,
         userReviewedAt: new Date(),
-        reviewType: 'daily_swipe',
+        reviewType: "daily_swipe",
       },
     });
 
     // Update item based on action
     const updates: any = { reviewedAt: new Date() };
 
-    if (action === 'agree') {
-      updates.status = 'reviewed';
-    } else if (action === 'hide') {
-      updates.status = 'archived';
+    if (action === "agree") {
+      updates.status = "reviewed";
+    } else if (action === "hide") {
+      updates.status = "archived";
       updates.archivedAt = new Date();
-    } else if (action === 'urgent') {
-      updates.status = 'reviewed';
+    } else if (action === "urgent") {
+      updates.status = "reviewed";
       // Create urgent action if applicable
     }
 
@@ -1756,7 +2124,7 @@ export const inboxService = {
 
 ```typescript
 // server/services/webhook-retry.service.ts
-import { prisma } from '@/packages/db';
+import { prisma } from "@/packages/db";
 
 const N8N_BASE_URL = process.env.N8N_WEBHOOK_URL!;
 const RETRY_DELAYS = [60, 300, 900]; // 1min, 5min, 15min in seconds
@@ -1767,10 +2135,10 @@ export const webhookRetryService = {
 
     try {
       const response = await fetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'X-Webhook-Secret': process.env.N8N_WEBHOOK_SECRET!,
+          "Content-Type": "application/json",
+          "X-Webhook-Secret": process.env.N8N_WEBHOOK_SECRET!,
         },
         body: JSON.stringify(payload),
       });
@@ -1804,7 +2172,7 @@ export const webhookRetryService = {
         error,
         statusCode,
         nextRetry,
-        status: 'pending',
+        status: "pending",
       },
     });
   },
@@ -1812,7 +2180,7 @@ export const webhookRetryService = {
   async retryPending(): Promise<void> {
     const pendingWebhooks = await prisma.failedWebhook.findMany({
       where: {
-        status: { in: ['pending', 'retrying'] },
+        status: { in: ["pending", "retrying"] },
         nextRetry: { lte: new Date() },
       },
     });
@@ -1820,10 +2188,10 @@ export const webhookRetryService = {
     for (const webhook of pendingWebhooks) {
       try {
         const response = await fetch(webhook.targetUrl, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            'X-Webhook-Secret': process.env.N8N_WEBHOOK_SECRET!,
+            "Content-Type": "application/json",
+            "X-Webhook-Secret": process.env.N8N_WEBHOOK_SECRET!,
           },
           body: JSON.stringify(webhook.payload),
         });
@@ -1833,7 +2201,7 @@ export const webhookRetryService = {
           await prisma.failedWebhook.update({
             where: { id: webhook.id },
             data: {
-              status: 'succeeded',
+              status: "succeeded",
               resolvedAt: new Date(),
             },
           });
@@ -1848,7 +2216,7 @@ export const webhookRetryService = {
           await prisma.failedWebhook.update({
             where: { id: webhook.id },
             data: {
-              status: 'failed',
+              status: "failed",
               retryCount: newRetryCount,
               error: (error as Error).message,
               resolvedAt: new Date(),
@@ -1862,7 +2230,7 @@ export const webhookRetryService = {
           await prisma.failedWebhook.update({
             where: { id: webhook.id },
             data: {
-              status: 'retrying',
+              status: "retrying",
               retryCount: newRetryCount,
               nextRetry: new Date(Date.now() + nextDelay * 1000),
               error: (error as Error).message,
@@ -1876,7 +2244,7 @@ export const webhookRetryService = {
   async getFailedWebhooks(status?: string) {
     return prisma.failedWebhook.findMany({
       where: status ? { status } : undefined,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       take: 100,
     });
   },
@@ -1893,12 +2261,12 @@ The `retryPending()` function should be called periodically. Options:
 
 ```typescript
 // app/api/webhooks/retry-pending/route.ts
-import { webhookRetryService } from '@/server/services/webhook-retry.service';
+import { webhookRetryService } from "@/server/services/webhook-retry.service";
 
 export async function POST(request: Request) {
-  const authHeader = request.headers.get('x-webhook-secret');
+  const authHeader = request.headers.get("x-webhook-secret");
   if (authHeader !== process.env.N8N_WEBHOOK_SECRET) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   await webhookRetryService.retryPending();
@@ -1906,109 +2274,252 @@ export async function POST(request: Request) {
 }
 ```
 
-### Authentication Flow
+### Authentication Architecture
+
+Bee separates **app authentication** (logging into Bee) from **service authentication** (connecting email/calendar providers).
+
+#### App Authentication (Logging into Bee)
+
+Users can sign into Bee using credentials stored in the database or via OAuth. For MVP, we use simple email/password with option to add OAuth later.
 
 ```mermaid
 sequenceDiagram
     participant U as User
     participant App as Next.js
     participant Auth as NextAuth.js
-    participant MS as Microsoft OAuth
+    participant DB as Database
 
-    U->>App: Click "Sign in with Microsoft"
-    App->>Auth: Initiate OAuth flow
-    Auth->>MS: Redirect to Microsoft login
-    U->>MS: Enter credentials
-    MS->>Auth: Return auth code
-    Auth->>MS: Exchange for tokens
-    MS->>Auth: Access + Refresh tokens
-    Auth->>App: Create session, store tokens
+    U->>App: Enter email/password
+    App->>Auth: Validate credentials
+    Auth->>DB: Check user record
+    DB->>Auth: User found, password matches
+    Auth->>App: Create session
     App->>U: Redirect to dashboard
+```
+
+#### Service Authentication (Email/Calendar Providers)
+
+Email and calendar providers are connected separately via the Settings page. Users add accounts with either:
+1. **IMAP/CalDAV credentials** (app-specific passwords)
+2. **OAuth tokens** (if they've registered an OAuth app)
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant App as Bee App
+    participant Settings as Settings Page
+    participant DB as Database
+
+    U->>Settings: Add Email Account
+    Settings->>U: Choose provider type (IMAP or OAuth)
+
+    alt IMAP Provider
+        U->>Settings: Enter IMAP host, port, app password
+        Settings->>App: Test connection
+        App->>Settings: Connection successful
+        Settings->>DB: Save encrypted credentials
+    else OAuth Provider
+        U->>Settings: Click "Connect with Microsoft/Google"
+        Settings->>App: Initiate OAuth flow
+        App->>U: Complete OAuth
+        Settings->>DB: Save encrypted tokens
+    end
 ```
 
 ### Auth Middleware
 
 ```typescript
 // lib/auth.ts
-import NextAuth from 'next-auth';
-import MicrosoftEntraID from 'next-auth/providers/microsoft-entra-id';
-import { PrismaAdapter } from '@auth/prisma-adapter';
-import { prisma } from '@/packages/db';
+import NextAuth from "next-auth";
+import Credentials from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
+import { PrismaAdapter } from "@auth/prisma-adapter";
+import { prisma } from "@/packages/db";
+import { verifyPassword } from "./password";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   providers: [
-    MicrosoftEntraID({
-      clientId: process.env.MICROSOFT_CLIENT_ID!,
-      clientSecret: process.env.MICROSOFT_CLIENT_SECRET!,
-      authorization: {
-        params: {
-          scope: 'openid profile email User.Read Calendars.ReadWrite Mail.Read Files.ReadWrite.All',
-        },
+    // Primary: Email/Password login
+    Credentials({
+      name: "credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          return null;
+        }
+
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email as string },
+        });
+
+        if (!user || !user.passwordHash) {
+          return null;
+        }
+
+        const isValid = await verifyPassword(
+          credentials.password as string,
+          user.passwordHash
+        );
+
+        if (!isValid) {
+          return null;
+        }
+
+        return { id: user.id, email: user.email, name: user.name };
       },
     }),
+
+    // Optional: Google OAuth for app login (not for Gmail access)
+    ...(process.env.GOOGLE_CLIENT_ID
+      ? [
+          Google({
+            clientId: process.env.GOOGLE_CLIENT_ID,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+          }),
+        ]
+      : []),
   ],
-  callbacks: {
-    async jwt({ token, account }) {
-      // Initial sign in - store tokens
-      if (account) {
-        return {
-          ...token,
-          accessToken: account.access_token,
-          refreshToken: account.refresh_token,
-          expiresAt: account.expires_at,
-        };
-      }
-
-      // Return token if not expired
-      if (Date.now() < (token.expiresAt as number) * 1000) {
-        return token;
-      }
-
-      // Token expired - refresh it
-      return refreshAccessToken(token);
-    },
-    async session({ session, token }) {
-      session.accessToken = token.accessToken;
-      session.error = token.error;
-      return session;
-    },
+  session: {
+    strategy: "jwt",
+  },
+  pages: {
+    signIn: "/login",
   },
 });
+```
 
-// Token refresh helper
-async function refreshAccessToken(token: any) {
-  try {
-    const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: process.env.MICROSOFT_CLIENT_ID!,
-        client_secret: process.env.MICROSOFT_CLIENT_SECRET!,
-        grant_type: 'refresh_token',
-        refresh_token: token.refreshToken,
-      }),
-    });
+### Email/Calendar Account Management
 
-    const refreshedTokens = await response.json();
+Credentials for email and calendar providers are managed separately and stored encrypted.
 
-    if (!response.ok) {
-      throw refreshedTokens;
+```typescript
+// server/services/account.service.ts
+import { prisma } from "@/packages/db";
+import { encrypt, decrypt } from "@/lib/encryption";
+
+export const accountService = {
+  // Add IMAP email account
+  async addImapEmailAccount(userId: string, config: ImapConfig) {
+    // Test connection first
+    const testResult = await testImapConnection(config);
+    if (!testResult.success) {
+      throw new Error(`Connection failed: ${testResult.error}`);
     }
 
-    return {
-      ...token,
-      accessToken: refreshedTokens.access_token,
-      refreshToken: refreshedTokens.refresh_token ?? token.refreshToken,
-      expiresAt: Math.floor(Date.now() / 1000 + refreshedTokens.expires_in),
-    };
-  } catch (error) {
-    console.error('Error refreshing access token:', error);
-    return {
-      ...token,
-      error: 'RefreshAccessTokenError',
-    };
-  }
+    return prisma.emailAccount.create({
+      data: {
+        userId,
+        name: config.name,
+        email: config.email,
+        provider: "imap",
+        imapHost: config.imapHost,
+        imapPort: config.imapPort,
+        smtpHost: config.smtpHost,
+        smtpPort: config.smtpPort,
+        username: config.username,
+        password: encrypt(config.password), // Encrypted!
+        isDefault: config.isDefault ?? false,
+        syncStatus: "idle",
+      },
+    });
+  },
+
+  // Add OAuth email account (Microsoft or Google)
+  async addOAuthEmailAccount(
+    userId: string,
+    provider: "microsoft_oauth" | "google_oauth",
+    tokens: OAuthTokens
+  ) {
+    return prisma.emailAccount.create({
+      data: {
+        userId,
+        name: `${provider === "microsoft_oauth" ? "Outlook" : "Gmail"} Account`,
+        email: tokens.email,
+        provider,
+        oauthAccessToken: encrypt(tokens.accessToken),
+        oauthRefreshToken: encrypt(tokens.refreshToken),
+        oauthExpiresAt: tokens.expiresAt,
+        isDefault: false,
+        syncStatus: "idle",
+      },
+    });
+  },
+
+  // Get decrypted credentials for use
+  async getEmailCredentials(accountId: string, userId: string) {
+    const account = await prisma.emailAccount.findFirst({
+      where: { id: accountId, userId },
+    });
+
+    if (!account) throw new Error("Account not found");
+
+    if (account.provider === "imap") {
+      return {
+        type: "imap" as const,
+        host: account.imapHost!,
+        port: account.imapPort!,
+        username: account.username!,
+        password: decrypt(account.password!),
+        smtpHost: account.smtpHost!,
+        smtpPort: account.smtpPort!,
+      };
+    } else {
+      return {
+        type: "oauth" as const,
+        provider: account.provider,
+        accessToken: decrypt(account.oauthAccessToken!),
+        refreshToken: decrypt(account.oauthRefreshToken!),
+        expiresAt: account.oauthExpiresAt!,
+      };
+    }
+  },
+};
+```
+
+### Encryption Utilities
+
+```typescript
+// lib/encryption.ts
+import crypto from "crypto";
+
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY!; // 32 bytes
+const ALGORITHM = "aes-256-gcm";
+
+export function encrypt(text: string): string {
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv(
+    ALGORITHM,
+    Buffer.from(ENCRYPTION_KEY, "hex"),
+    iv
+  );
+
+  let encrypted = cipher.update(text, "utf8", "hex");
+  encrypted += cipher.final("hex");
+
+  const authTag = cipher.getAuthTag();
+
+  return `${iv.toString("hex")}:${authTag.toString("hex")}:${encrypted}`;
+}
+
+export function decrypt(encryptedText: string): string {
+  const [ivHex, authTagHex, encrypted] = encryptedText.split(":");
+
+  const decipher = crypto.createDecipheriv(
+    ALGORITHM,
+    Buffer.from(ENCRYPTION_KEY, "hex"),
+    Buffer.from(ivHex, "hex")
+  );
+
+  decipher.setAuthTag(Buffer.from(authTagHex, "hex"));
+
+  let decrypted = decipher.update(encrypted, "hex", "utf8");
+  decrypted += decipher.final("utf8");
+
+  return decrypted;
 }
 ```
 
@@ -2154,11 +2665,23 @@ NEXT_PUBLIC_SUPABASE_URL="https://[project].supabase.co"
 NEXT_PUBLIC_SUPABASE_ANON_KEY="your-anon-key"
 SUPABASE_SERVICE_ROLE_KEY="your-service-key"
 
-# Authentication (Microsoft)
-MICROSOFT_CLIENT_ID="your-client-id"
-MICROSOFT_CLIENT_SECRET="your-client-secret"
+# App Authentication (NextAuth.js)
 NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="generate-with-openssl-rand-base64-32"
+
+# Encryption Key for storing email/calendar credentials
+# Generate with: openssl rand -hex 32
+ENCRYPTION_KEY="64-character-hex-string"
+
+# OAuth Providers (OPTIONAL - only if user wants OAuth login)
+# Google OAuth (for app login, not Gmail access)
+GOOGLE_CLIENT_ID="your-google-client-id"
+GOOGLE_CLIENT_SECRET="your-google-client-secret"
+
+# Microsoft OAuth (OPTIONAL - for enhanced Outlook/OneDrive)
+# Only needed if user registers their own Azure app
+MICROSOFT_CLIENT_ID="your-microsoft-client-id"
+MICROSOFT_CLIENT_SECRET="your-microsoft-client-secret"
 
 # n8n Integration
 N8N_WEBHOOK_URL="https://n8n.yourdomain.com/webhook"
@@ -2172,6 +2695,11 @@ LIBRECHAT_API_KEY="your-api-key"
 SENTRY_DSN="https://xxx@sentry.io/xxx"
 ```
 
+**Note on OAuth credentials:**
+- `GOOGLE_CLIENT_ID/SECRET`: Only needed if you want to offer "Sign in with Google" for app login
+- `MICROSOFT_CLIENT_ID/SECRET`: Only needed if a user has registered their own Azure app for enhanced Outlook integration
+- For MVP, neither is required - users can sign in with email/password and connect email via IMAP
+
 ---
 
 ## Deployment Architecture
@@ -2179,12 +2707,14 @@ SENTRY_DSN="https://xxx@sentry.io/xxx"
 ### Deployment Strategy
 
 **Frontend + Backend Deployment (VPS):**
+
 - **Platform:** Docker container on Hugo's VPS
 - **Build Command:** `pnpm build`
 - **Output Directory:** `.next/`
 - **Process Manager:** PM2 with clustering
 
 **Database:**
+
 - **Platform:** Supabase Cloud
 - **Region:** EU (closest to VPS)
 - **Backups:** Automatic daily (Supabase managed)
@@ -2207,8 +2737,8 @@ jobs:
       - uses: pnpm/action-setup@v2
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'pnpm'
+          node-version: "20"
+          cache: "pnpm"
       - run: pnpm install
       - run: pnpm typecheck
       - run: pnpm lint
@@ -2236,10 +2766,10 @@ jobs:
 
 ### Environments
 
-| Environment | Frontend URL | Backend URL | Purpose |
-|-------------|--------------|-------------|---------|
-| Development | http://localhost:3000 | http://localhost:3000/api | Local development |
-| Production | https://bee.yourdomain.com | https://bee.yourdomain.com/api | Live environment |
+| Environment | Frontend URL               | Backend URL                    | Purpose           |
+| ----------- | -------------------------- | ------------------------------ | ----------------- |
+| Development | http://localhost:3000      | http://localhost:3000/api      | Local development |
+| Production  | https://bee.yourdomain.com | https://bee.yourdomain.com/api | Live environment  |
 
 ---
 
@@ -2248,16 +2778,19 @@ jobs:
 ### Security Requirements
 
 **Frontend Security:**
+
 - CSP Headers: Strict Content-Security-Policy via Next.js config
 - XSS Prevention: React's built-in escaping + DOMPurify for user content
 - Secure Storage: HttpOnly cookies for session, no localStorage for tokens
 
 **Backend Security:**
+
 - Input Validation: Zod schemas on all tRPC procedures
 - Rate Limiting: Upstash Redis rate limiter (100 req/min per user)
 - CORS Policy: Restrict to app domain only
 
 **Authentication Security:**
+
 - Token Storage: Encrypted in database, never exposed to client
 - Session Management: NextAuth.js with secure session cookies
 - Token Refresh: Automatic refresh via NextAuth.js callbacks
@@ -2265,11 +2798,13 @@ jobs:
 ### Performance Optimization
 
 **Frontend Performance:**
+
 - Bundle Size Target: < 200KB initial JS
 - Loading Strategy: App Router streaming, Suspense boundaries
 - Caching Strategy: SWR for API calls, React Query cache
 
 **Backend Performance:**
+
 - Response Time Target: < 200ms for API calls
 - Database Optimization: Proper indexes, connection pooling (Supabase)
 - Caching Strategy: Redis for session data, API response caching
@@ -2291,6 +2826,7 @@ jobs:
 ### Test Organization
 
 **Frontend Tests:**
+
 ```
 apps/web/tests/
 ├── unit/
@@ -2305,6 +2841,7 @@ apps/web/tests/
 ```
 
 **Backend Tests:**
+
 ```
 apps/web/tests/
 └── integration/
@@ -2316,6 +2853,7 @@ apps/web/tests/
 ### Test Examples
 
 **Frontend Component Test:**
+
 ```typescript
 // tests/unit/components/SwipeCard.test.tsx
 import { render, screen } from '@testing-library/react';
@@ -2344,43 +2882,45 @@ describe('SwipeCard', () => {
 ```
 
 **Backend API Test:**
+
 ```typescript
 // tests/integration/inbox.test.ts
-import { createTestContext } from '../helpers';
-import { inboxRouter } from '@/server/routers/inbox';
+import { createTestContext } from "../helpers";
+import { inboxRouter } from "@/server/routers/inbox";
 
-describe('Inbox Router', () => {
+describe("Inbox Router", () => {
   const ctx = createTestContext();
 
-  it('creates inbox item on capture', async () => {
+  it("creates inbox item on capture", async () => {
     const result = await inboxRouter.capture({
       ctx,
       input: {
-        type: 'manual',
-        content: 'Test capture',
+        type: "manual",
+        content: "Test capture",
       },
     });
 
     expect(result.id).toBeDefined();
-    expect(result.status).toBe('pending');
+    expect(result.status).toBe("pending");
   });
 });
 ```
 
 **E2E Test:**
+
 ```typescript
 // tests/e2e/review.spec.ts
-import { test, expect } from '@playwright/test';
+import { test, expect } from "@playwright/test";
 
-test('daily review swipe flow', async ({ page }) => {
-  await page.goto('/review');
+test("daily review swipe flow", async ({ page }) => {
+  await page.goto("/review");
 
   // Wait for card to load
   await expect(page.locator('[data-testid="swipe-card"]')).toBeVisible();
 
   // Swipe right (agree)
   const card = page.locator('[data-testid="swipe-card"]');
-  await card.dragTo(page.locator('body'), {
+  await card.dragTo(page.locator("body"), {
     targetPosition: { x: 300, y: 0 },
   });
 
@@ -2388,7 +2928,7 @@ test('daily review swipe flow', async ({ page }) => {
   await expect(card).not.toBeVisible();
 
   // Check progress updated
-  await expect(page.locator('[data-testid="progress"]')).toContainText('1 of');
+  await expect(page.locator('[data-testid="progress"]')).toContainText("1 of");
 });
 ```
 
@@ -2407,14 +2947,14 @@ test('daily review swipe flow', async ({ page }) => {
 
 ### Naming Conventions
 
-| Element | Frontend | Backend | Example |
-|---------|----------|---------|---------|
-| Components | PascalCase | - | `SwipeCard.tsx` |
-| Hooks | camelCase with 'use' | - | `useReviewStore.ts` |
-| API Routes | - | kebab-case | `/api/webhooks/email-received` |
-| tRPC Procedures | - | camelCase | `inbox.capture` |
-| Database Tables | - | PascalCase | `InboxItem`, `ClassificationAudit` |
-| Database Columns | - | camelCase | `userId`, `createdAt` |
+| Element          | Frontend             | Backend    | Example                            |
+| ---------------- | -------------------- | ---------- | ---------------------------------- |
+| Components       | PascalCase           | -          | `SwipeCard.tsx`                    |
+| Hooks            | camelCase with 'use' | -          | `useReviewStore.ts`                |
+| API Routes       | -                    | kebab-case | `/api/webhooks/email-received`     |
+| tRPC Procedures  | -                    | camelCase  | `inbox.capture`                    |
+| Database Tables  | -                    | PascalCase | `InboxItem`, `ClassificationAudit` |
+| Database Columns | -                    | camelCase  | `userId`, `createdAt`              |
 
 ---
 
@@ -2438,25 +2978,25 @@ interface ApiError {
 
 ```typescript
 // lib/error-handler.ts
-import { toast } from 'sonner';
+import { toast } from "sonner";
 
 export function handleApiError(error: unknown) {
   if (error instanceof TRPCClientError) {
     const code = error.data?.code;
 
     switch (code) {
-      case 'UNAUTHORIZED':
+      case "UNAUTHORIZED":
         // Redirect to login
-        window.location.href = '/login';
+        window.location.href = "/login";
         break;
-      case 'NOT_FOUND':
-        toast.error('Item not found');
+      case "NOT_FOUND":
+        toast.error("Item not found");
         break;
       default:
-        toast.error(error.message || 'Something went wrong');
+        toast.error(error.message || "Something went wrong");
     }
   } else {
-    toast.error('An unexpected error occurred');
+    toast.error("An unexpected error occurred");
     console.error(error);
   }
 }
@@ -2466,29 +3006,29 @@ export function handleApiError(error: unknown) {
 
 ```typescript
 // server/lib/errors.ts
-import { TRPCError } from '@trpc/server';
+import { TRPCError } from "@trpc/server";
 
 export function handleServiceError(error: unknown): never {
-  console.error('Service error:', error);
+  console.error("Service error:", error);
 
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    if (error.code === 'P2002') {
+    if (error.code === "P2002") {
       throw new TRPCError({
-        code: 'CONFLICT',
-        message: 'A record with this value already exists',
+        code: "CONFLICT",
+        message: "A record with this value already exists",
       });
     }
-    if (error.code === 'P2025') {
+    if (error.code === "P2025") {
       throw new TRPCError({
-        code: 'NOT_FOUND',
-        message: 'Record not found',
+        code: "NOT_FOUND",
+        message: "Record not found",
       });
     }
   }
 
   throw new TRPCError({
-    code: 'INTERNAL_SERVER_ERROR',
-    message: 'An unexpected error occurred',
+    code: "INTERNAL_SERVER_ERROR",
+    message: "An unexpected error occurred",
   });
 }
 ```
@@ -2507,12 +3047,14 @@ export function handleServiceError(error: unknown): never {
 ### Key Metrics
 
 **Frontend Metrics:**
+
 - Core Web Vitals (LCP, FID, CLS)
 - JavaScript errors per session
 - API response times from client
 - Swipe gesture success rate
 
 **Backend Metrics:**
+
 - Request rate per endpoint
 - Error rate (4xx, 5xx)
 - Response time p50, p95, p99
@@ -2523,25 +3065,23 @@ export function handleServiceError(error: unknown): never {
 
 ```typescript
 // lib/logger.ts
-import pino from 'pino';
+import pino from "pino";
 
 export const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  transport: process.env.NODE_ENV === 'development'
-    ? { target: 'pino-pretty' }
-    : undefined,
+  level: process.env.LOG_LEVEL || "info",
+  transport: process.env.NODE_ENV === "development" ? { target: "pino-pretty" } : undefined,
 });
 
 // Usage in services
-logger.info({ itemId, action }, 'Swipe processed');
-logger.error({ error, itemId }, 'Classification failed');
+logger.info({ itemId, action }, "Swipe processed");
+logger.error({ error, itemId }, "Classification failed");
 ```
 
 ---
 
 ## Checklist Results Report
 
-*To be completed after architecture review and before development begins.*
+_To be completed after architecture review and before development begins._
 
 ---
 

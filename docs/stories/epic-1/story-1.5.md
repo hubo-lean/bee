@@ -1,44 +1,71 @@
-# Story 1.5: External Service Connection Verification
+# Story 1.5: External Service Connections & Verification
 
 ## Story Overview
 
-| Field | Value |
-|-------|-------|
-| **Story ID** | 1.5 |
-| **Epic** | [Epic 1: Foundation & Infrastructure](epic-1.md) |
-| **Priority** | P1 - High |
-| **Estimated Effort** | Medium (2-3 days) |
-| **Dependencies** | Story 1.1, 1.2, 1.3 (Project, Database, Auth) |
-| **Blocks** | Epic 2+ (all external integrations) |
+| Field                | Value                                            |
+| -------------------- | ------------------------------------------------ |
+| **Story ID**         | 1.5                                              |
+| **Epic**             | [Epic 1: Foundation & Infrastructure](epic-1.md) |
+| **Priority**         | P1 - High                                        |
+| **Estimated Effort** | Medium (2-3 days)                                |
+| **Dependencies**     | Story 1.1, 1.2, 1.3 (Project, Database, Auth)    |
+| **Blocks**           | Epic 2+ (all external integrations)              |
 
 ## User Story
 
-**As a** developer,
-**I want** to verify connections to external services,
-**So that** I know integrations will work before building features that depend on them.
+**As a** user,
+**I want** to connect my email and calendar accounts to Bee,
+**So that** I can capture emails and see my calendar within the app.
 
 ## Detailed Description
 
-This story validates that Bee can successfully communicate with all required external services:
+This story implements **service authentication** - connecting external email and calendar providers. This is **separate** from app authentication (Story 1.3).
 
-1. **Microsoft Graph API** - For email, calendar, and OneDrive access
-2. **n8n** - For workflow automation and integrations
-3. **LibreChat** - For AI chat functionality (via MCP or API)
-4. **LLM APIs** - For AI classification (tested via n8n)
+Users can connect providers via:
+1. **IMAP/SMTP credentials** (app-specific passwords) - Works with any email provider
+2. **OAuth tokens** (optional) - For enhanced Microsoft/Google integration if user has OAuth app registered
 
-The goal is to create test connections and a health check endpoint that confirms all services are operational before building features that depend on them.
+Additionally, this story verifies connections to:
+- **n8n** - For workflow automation
+- **LibreChat** - For AI chat functionality
+
+The story also creates a health check endpoint and Settings page for managing connections.
 
 ## Acceptance Criteria
 
-### AC1: Microsoft Graph API Connection
-- [ ] Can fetch authenticated user's profile via Graph API
-- [ ] Can fetch user's calendar events (read test)
-- [ ] Can fetch user's OneDrive root folder (read test)
-- [ ] Access token used from NextAuth session
-- [ ] Token refresh works when token is expired
-- [ ] Errors handled gracefully with clear messages
+### AC1: Email Account Model & Storage
 
-### AC2: n8n Webhook Connection
+- [ ] `EmailAccount` model added to database schema
+- [ ] Support for multiple email accounts per user
+- [ ] IMAP credentials stored encrypted (AES-256-GCM)
+- [ ] OAuth tokens stored encrypted (if applicable)
+- [ ] Encryption key managed via environment variable
+
+### AC2: IMAP Email Account Connection
+
+- [ ] Settings page has "Add Email Account" option
+- [ ] Form for IMAP configuration: host, port, username, app password
+- [ ] Connection test before saving credentials
+- [ ] Success/failure feedback shown to user
+- [ ] Account appears in connected accounts list
+- [ ] Can remove/disconnect account
+
+### AC3: OAuth Email Account (Optional)
+
+- [ ] Support for Microsoft OAuth (if configured)
+- [ ] Support for Google OAuth (if configured)
+- [ ] OAuth flow completes and tokens stored
+- [ ] Gracefully hidden if OAuth not configured
+
+### AC4: Calendar Account Connection
+
+- [ ] CalDAV configuration option
+- [ ] Microsoft/Google calendar OAuth (if configured)
+- [ ] Connection test validates calendar access
+- [ ] Calendar URL stored for sync
+
+### AC5: n8n Webhook Connection
+
 - [ ] n8n instance accessible from development machine
 - [ ] Test webhook endpoint created in n8n
 - [ ] Bee can POST to n8n webhook successfully
@@ -46,53 +73,240 @@ The goal is to create test connections and a health check endpoint that confirms
 - [ ] Webhook secret authentication works
 - [ ] Connection timeout handled (5 second timeout)
 
-### AC3: LibreChat/MCP Connection
+### AC6: LibreChat/MCP Connection
+
 - [ ] LibreChat instance accessible
 - [ ] Can send test message and receive response
-- [ ] MCP protocol connection verified (if applicable)
 - [ ] API key authentication works
 - [ ] Connection errors handled gracefully
 
-### AC4: Health Check Endpoint
+### AC7: Health Check Endpoint
+
 - [ ] Endpoint: `GET /api/health`
 - [ ] Returns status for each service:
   - `database`: connected/disconnected
-  - `microsoft`: connected/disconnected/token_error
   - `n8n`: connected/disconnected
   - `librechat`: connected/disconnected
 - [ ] Returns overall status: `healthy`/`degraded`/`unhealthy`
 - [ ] Response includes timestamp and version
 - [ ] Endpoint is public (no auth required)
 
-### AC5: Environment Variable Documentation
-- [ ] All service URLs documented in `.env.example`
-- [ ] All API keys/secrets documented (with placeholders)
-- [ ] Connection requirements documented in README
-- [ ] Troubleshooting guide for common connection issues
+### AC8: Settings Page Integration
 
-### AC6: Settings Page Integration
-- [ ] Settings page shows connection status for each service
+- [ ] Settings page shows all connected accounts
 - [ ] Visual indicators (green/red) for connected/disconnected
 - [ ] "Test Connection" button for each service
-- [ ] Last checked timestamp displayed
+- [ ] "Add Account" buttons for each provider type
+- [ ] Last sync timestamp displayed
 - [ ] Error messages shown for failed connections
 
 ## Technical Implementation Notes
 
-### File: `app/api/health/route.ts`
+### File: `lib/encryption.ts`
+
 ```typescript
-import { NextResponse } from 'next/server';
-import { prisma } from '@packages/db';
+import crypto from "crypto";
+
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY!; // 32 bytes hex
+const ALGORITHM = "aes-256-gcm";
+
+export function encrypt(text: string): string {
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv(
+    ALGORITHM,
+    Buffer.from(ENCRYPTION_KEY, "hex"),
+    iv
+  );
+
+  let encrypted = cipher.update(text, "utf8", "hex");
+  encrypted += cipher.final("hex");
+
+  const authTag = cipher.getAuthTag();
+
+  return `${iv.toString("hex")}:${authTag.toString("hex")}:${encrypted}`;
+}
+
+export function decrypt(encryptedText: string): string {
+  const [ivHex, authTagHex, encrypted] = encryptedText.split(":");
+
+  const decipher = crypto.createDecipheriv(
+    ALGORITHM,
+    Buffer.from(ENCRYPTION_KEY, "hex"),
+    Buffer.from(ivHex, "hex")
+  );
+
+  decipher.setAuthTag(Buffer.from(authTagHex, "hex"));
+
+  let decrypted = decipher.update(encrypted, "hex", "utf8");
+  decrypted += decipher.final("utf8");
+
+  return decrypted;
+}
+```
+
+### File: `server/services/account.service.ts`
+
+```typescript
+import { prisma } from "@packages/db";
+import { encrypt, decrypt } from "@/lib/encryption";
+import Imap from "imap";
+
+interface ImapConfig {
+  name: string;
+  email: string;
+  imapHost: string;
+  imapPort: number;
+  smtpHost: string;
+  smtpPort: number;
+  username: string;
+  password: string;
+  isDefault?: boolean;
+}
+
+export const accountService = {
+  // Test IMAP connection
+  async testImapConnection(config: ImapConfig): Promise<{ success: boolean; error?: string }> {
+    return new Promise((resolve) => {
+      const imap = new Imap({
+        user: config.username,
+        password: config.password,
+        host: config.imapHost,
+        port: config.imapPort,
+        tls: true,
+        tlsOptions: { rejectUnauthorized: false },
+        connTimeout: 10000,
+      });
+
+      imap.once("ready", () => {
+        imap.end();
+        resolve({ success: true });
+      });
+
+      imap.once("error", (err: Error) => {
+        resolve({ success: false, error: err.message });
+      });
+
+      imap.connect();
+    });
+  },
+
+  // Add IMAP email account
+  async addImapEmailAccount(userId: string, config: ImapConfig) {
+    // Test connection first
+    const testResult = await this.testImapConnection(config);
+    if (!testResult.success) {
+      throw new Error(`Connection failed: ${testResult.error}`);
+    }
+
+    return prisma.emailAccount.create({
+      data: {
+        userId,
+        name: config.name,
+        email: config.email,
+        provider: "imap",
+        imapHost: config.imapHost,
+        imapPort: config.imapPort,
+        smtpHost: config.smtpHost,
+        smtpPort: config.smtpPort,
+        username: config.username,
+        password: encrypt(config.password), // Encrypted!
+        isDefault: config.isDefault ?? false,
+        syncStatus: "idle",
+      },
+    });
+  },
+
+  // Add OAuth email account (Microsoft or Google)
+  async addOAuthEmailAccount(
+    userId: string,
+    provider: "microsoft_oauth" | "google_oauth",
+    tokens: { email: string; accessToken: string; refreshToken: string; expiresAt: Date }
+  ) {
+    return prisma.emailAccount.create({
+      data: {
+        userId,
+        name: `${provider === "microsoft_oauth" ? "Outlook" : "Gmail"} Account`,
+        email: tokens.email,
+        provider,
+        oauthAccessToken: encrypt(tokens.accessToken),
+        oauthRefreshToken: encrypt(tokens.refreshToken),
+        oauthExpiresAt: tokens.expiresAt,
+        isDefault: false,
+        syncStatus: "idle",
+      },
+    });
+  },
+
+  // Get all email accounts for user
+  async getEmailAccounts(userId: string) {
+    return prisma.emailAccount.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        provider: true,
+        isDefault: true,
+        syncStatus: true,
+        lastSyncAt: true,
+        createdAt: true,
+      },
+    });
+  },
+
+  // Delete email account
+  async deleteEmailAccount(userId: string, accountId: string) {
+    return prisma.emailAccount.deleteMany({
+      where: { id: accountId, userId },
+    });
+  },
+
+  // Get decrypted credentials for use (internal only)
+  async getEmailCredentials(accountId: string, userId: string) {
+    const account = await prisma.emailAccount.findFirst({
+      where: { id: accountId, userId },
+    });
+
+    if (!account) throw new Error("Account not found");
+
+    if (account.provider === "imap") {
+      return {
+        type: "imap" as const,
+        host: account.imapHost!,
+        port: account.imapPort!,
+        username: account.username!,
+        password: decrypt(account.password!),
+        smtpHost: account.smtpHost!,
+        smtpPort: account.smtpPort!,
+      };
+    } else {
+      return {
+        type: "oauth" as const,
+        provider: account.provider,
+        accessToken: decrypt(account.oauthAccessToken!),
+        refreshToken: decrypt(account.oauthRefreshToken!),
+        expiresAt: account.oauthExpiresAt!,
+      };
+    }
+  },
+};
+```
+
+### File: `app/api/health/route.ts`
+
+```typescript
+import { NextResponse } from "next/server";
+import { prisma } from "@packages/db";
 
 interface ServiceStatus {
-  status: 'connected' | 'disconnected' | 'error';
+  status: "connected" | "disconnected" | "error";
   latency?: number;
   error?: string;
   lastChecked: string;
 }
 
 interface HealthResponse {
-  status: 'healthy' | 'degraded' | 'unhealthy';
+  status: "healthy" | "degraded" | "unhealthy";
   version: string;
   timestamp: string;
   services: {
@@ -107,13 +321,13 @@ async function checkDatabase(): Promise<ServiceStatus> {
   try {
     await prisma.$queryRaw`SELECT 1`;
     return {
-      status: 'connected',
+      status: "connected",
       latency: Date.now() - start,
       lastChecked: new Date().toISOString(),
     };
   } catch (error) {
     return {
-      status: 'disconnected',
+      status: "disconnected",
       error: (error as Error).message,
       lastChecked: new Date().toISOString(),
     };
@@ -124,9 +338,9 @@ async function checkN8n(): Promise<ServiceStatus> {
   const start = Date.now();
   try {
     const response = await fetch(`${process.env.N8N_WEBHOOK_URL}/health`, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'X-Webhook-Secret': process.env.N8N_WEBHOOK_SECRET!,
+        "X-Webhook-Secret": process.env.N8N_WEBHOOK_SECRET!,
       },
       signal: AbortSignal.timeout(5000),
     });
@@ -136,13 +350,13 @@ async function checkN8n(): Promise<ServiceStatus> {
     }
 
     return {
-      status: 'connected',
+      status: "connected",
       latency: Date.now() - start,
       lastChecked: new Date().toISOString(),
     };
   } catch (error) {
     return {
-      status: 'disconnected',
+      status: "disconnected",
       error: (error as Error).message,
       lastChecked: new Date().toISOString(),
     };
@@ -153,9 +367,9 @@ async function checkLibreChat(): Promise<ServiceStatus> {
   const start = Date.now();
   try {
     const response = await fetch(`${process.env.LIBRECHAT_URL}/api/health`, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'Authorization': `Bearer ${process.env.LIBRECHAT_API_KEY}`,
+        Authorization: `Bearer ${process.env.LIBRECHAT_API_KEY}`,
       },
       signal: AbortSignal.timeout(5000),
     });
@@ -165,13 +379,13 @@ async function checkLibreChat(): Promise<ServiceStatus> {
     }
 
     return {
-      status: 'connected',
+      status: "connected",
       latency: Date.now() - start,
       lastChecked: new Date().toISOString(),
     };
   } catch (error) {
     return {
-      status: 'disconnected',
+      status: "disconnected",
       error: (error as Error).message,
       lastChecked: new Date().toISOString(),
     };
@@ -189,264 +403,145 @@ export async function GET() {
 
   // Determine overall status
   const statuses = Object.values(services).map((s) => s.status);
-  let overallStatus: 'healthy' | 'degraded' | 'unhealthy';
+  let overallStatus: "healthy" | "degraded" | "unhealthy";
 
-  if (statuses.every((s) => s === 'connected')) {
-    overallStatus = 'healthy';
-  } else if (statuses.some((s) => s === 'connected')) {
-    overallStatus = 'degraded';
+  if (statuses.every((s) => s === "connected")) {
+    overallStatus = "healthy";
+  } else if (statuses.some((s) => s === "connected")) {
+    overallStatus = "degraded";
   } else {
-    overallStatus = 'unhealthy';
+    overallStatus = "unhealthy";
   }
 
   const response: HealthResponse = {
     status: overallStatus,
-    version: process.env.npm_package_version || '0.1.0',
+    version: process.env.npm_package_version || "0.1.0",
     timestamp: new Date().toISOString(),
     services,
   };
 
   return NextResponse.json(response, {
-    status: overallStatus === 'unhealthy' ? 503 : 200,
+    status: overallStatus === "unhealthy" ? 503 : 200,
   });
 }
 ```
 
-### File: `lib/services/microsoft-graph.ts`
+### File: `app/api/accounts/email/route.ts`
+
 ```typescript
-import { auth } from '@/lib/auth';
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { accountService } from "@/server/services/account.service";
+import { z } from "zod";
 
-const GRAPH_BASE_URL = 'https://graph.microsoft.com/v1.0';
+const addImapAccountSchema = z.object({
+  name: z.string().min(1),
+  email: z.string().email(),
+  imapHost: z.string().min(1),
+  imapPort: z.number().int().positive(),
+  smtpHost: z.string().min(1),
+  smtpPort: z.number().int().positive(),
+  username: z.string().min(1),
+  password: z.string().min(1),
+  isDefault: z.boolean().optional(),
+});
 
-export class MicrosoftGraphService {
-  private accessToken: string;
-
-  constructor(accessToken: string) {
-    this.accessToken = accessToken;
-  }
-
-  private async fetch<T>(endpoint: string): Promise<T> {
-    const response = await fetch(`${GRAPH_BASE_URL}${endpoint}`, {
-      headers: {
-        Authorization: `Bearer ${this.accessToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error?.message || `HTTP ${response.status}`);
-    }
-
-    return response.json();
-  }
-
-  async getProfile() {
-    return this.fetch<{
-      displayName: string;
-      mail: string;
-      userPrincipalName: string;
-    }>('/me');
-  }
-
-  async getCalendarEvents(startDate: Date, endDate: Date) {
-    const start = startDate.toISOString();
-    const end = endDate.toISOString();
-
-    return this.fetch<{
-      value: Array<{
-        id: string;
-        subject: string;
-        start: { dateTime: string };
-        end: { dateTime: string };
-      }>;
-    }>(`/me/calendarview?startDateTime=${start}&endDateTime=${end}`);
-  }
-
-  async getOneDriveRoot() {
-    return this.fetch<{
-      id: string;
-      name: string;
-      folder: { childCount: number };
-    }>('/me/drive/root');
-  }
-
-  async testConnection(): Promise<{
-    success: boolean;
-    profile?: { name: string; email: string };
-    error?: string;
-  }> {
-    try {
-      const profile = await this.getProfile();
-      return {
-        success: true,
-        profile: {
-          name: profile.displayName,
-          email: profile.mail || profile.userPrincipalName,
-        },
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: (error as Error).message,
-      };
-    }
-  }
-}
-
-export async function getMicrosoftGraphService() {
-  const session = await auth();
-
-  if (!session?.accessToken) {
-    throw new Error('No access token available');
-  }
-
-  return new MicrosoftGraphService(session.accessToken);
-}
-```
-
-### File: `lib/services/n8n.ts`
-```typescript
-const N8N_BASE_URL = process.env.N8N_WEBHOOK_URL!;
-const N8N_SECRET = process.env.N8N_WEBHOOK_SECRET!;
-
-export class N8nService {
-  private async fetch<T>(
-    path: string,
-    options: { method?: string; body?: object } = {}
-  ): Promise<T> {
-    const { method = 'POST', body } = options;
-
-    const response = await fetch(`${N8N_BASE_URL}${path}`, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Webhook-Secret': N8N_SECRET,
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(10000), // 10 second timeout
-    });
-
-    if (!response.ok) {
-      throw new Error(`n8n error: HTTP ${response.status}`);
-    }
-
-    return response.json();
-  }
-
-  async testConnection(): Promise<{
-    success: boolean;
-    message?: string;
-    error?: string;
-  }> {
-    try {
-      const result = await this.fetch<{ status: string }>('/test', {
-        method: 'POST',
-        body: { test: true, timestamp: new Date().toISOString() },
-      });
-
-      return {
-        success: true,
-        message: result.status || 'Connection successful',
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: (error as Error).message,
-      };
-    }
-  }
-
-  async triggerClassification(itemId: string, content: string) {
-    return this.fetch('/classify-inbox-item', {
-      body: { itemId, content },
-    });
-  }
-
-  async triggerCalendarFetch(startDate: string, endDate: string) {
-    return this.fetch('/fetch-calendar', {
-      body: { startDate, endDate },
-    });
-  }
-}
-
-export const n8nService = new N8nService();
-```
-
-### File: `lib/services/librechat.ts`
-```typescript
-const LIBRECHAT_URL = process.env.LIBRECHAT_URL!;
-const LIBRECHAT_API_KEY = process.env.LIBRECHAT_API_KEY!;
-
-export class LibreChatService {
-  private async fetch<T>(
-    path: string,
-    options: { method?: string; body?: object } = {}
-  ): Promise<T> {
-    const { method = 'GET', body } = options;
-
-    const response = await fetch(`${LIBRECHAT_URL}${path}`, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${LIBRECHAT_API_KEY}`,
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(10000),
-    });
-
-    if (!response.ok) {
-      throw new Error(`LibreChat error: HTTP ${response.status}`);
-    }
-
-    return response.json();
-  }
-
-  async testConnection(): Promise<{
-    success: boolean;
-    message?: string;
-    error?: string;
-  }> {
-    try {
-      // Adjust endpoint based on LibreChat's actual API
-      const result = await this.fetch<{ status: string }>('/api/health');
-
-      return {
-        success: true,
-        message: result.status || 'Connection successful',
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: (error as Error).message,
-      };
-    }
-  }
-
-  async sendMessage(message: string, conversationId?: string) {
-    return this.fetch('/api/ask', {
-      method: 'POST',
-      body: {
-        message,
-        conversationId,
-        model: 'claude-3-sonnet', // or configured default
-      },
-    });
-  }
-}
-
-export const libreChatService = new LibreChatService();
-```
-
-### File: `app/api/test-connection/microsoft/route.ts`
-```typescript
-import { NextResponse } from 'next/server';
-import { getMicrosoftGraphService } from '@/lib/services/microsoft-graph';
-
+// GET - List all email accounts
 export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const accounts = await accountService.getEmailAccounts(session.user.id);
+  return NextResponse.json({ accounts });
+}
+
+// POST - Add new email account
+export async function POST(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const graphService = await getMicrosoftGraphService();
-    const result = await graphService.testConnection();
+    const body = await request.json();
+    const data = addImapAccountSchema.parse(body);
+
+    const account = await accountService.addImapEmailAccount(session.user.id, data);
+
+    return NextResponse.json({
+      success: true,
+      account: {
+        id: account.id,
+        name: account.name,
+        email: account.email,
+        provider: account.provider,
+      },
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: error.errors[0].message }, { status: 400 });
+    }
+
+    return NextResponse.json(
+      { error: (error as Error).message || "Failed to add account" },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE - Remove email account
+export async function DELETE(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const accountId = searchParams.get("id");
+
+  if (!accountId) {
+    return NextResponse.json({ error: "Account ID required" }, { status: 400 });
+  }
+
+  await accountService.deleteEmailAccount(session.user.id, accountId);
+  return NextResponse.json({ success: true });
+}
+```
+
+### File: `app/api/accounts/email/test/route.ts`
+
+```typescript
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { accountService } from "@/server/services/account.service";
+import { z } from "zod";
+
+const testConnectionSchema = z.object({
+  imapHost: z.string().min(1),
+  imapPort: z.number().int().positive(),
+  username: z.string().min(1),
+  password: z.string().min(1),
+});
+
+export async function POST(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const data = testConnectionSchema.parse(body);
+
+    const result = await accountService.testImapConnection({
+      ...data,
+      name: "",
+      email: "",
+      smtpHost: "",
+      smtpPort: 0,
+    });
 
     return NextResponse.json(result);
   } catch (error) {
@@ -458,249 +553,492 @@ export async function GET() {
 }
 ```
 
-### File: `app/api/test-connection/n8n/route.ts`
-```typescript
-import { NextResponse } from 'next/server';
-import { n8nService } from '@/lib/services/n8n';
+### Prisma Schema Addition: `EmailAccount` Model
 
-export async function GET() {
-  const result = await n8nService.testConnection();
-  return NextResponse.json(result);
+Add to `packages/db/prisma/schema.prisma`:
+
+```prisma
+model EmailAccount {
+  id               String    @id @default(uuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name             String    // Display name (e.g., "Work Email")
+  email            String    // Email address
+  provider         String    // imap, microsoft_oauth, google_oauth
+
+  // IMAP credentials (encrypted)
+  imapHost         String?
+  imapPort         Int?
+  smtpHost         String?
+  smtpPort         Int?
+  username         String?
+  password         String?   // Encrypted with AES-256-GCM
+
+  // OAuth tokens (encrypted)
+  oauthAccessToken  String?  // Encrypted
+  oauthRefreshToken String?  // Encrypted
+  oauthExpiresAt    DateTime?
+
+  isDefault        Boolean   @default(false)
+  syncStatus       String    @default("idle") // idle, syncing, error
+  lastSyncAt       DateTime?
+  lastSyncError    String?
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([userId])
 }
-```
 
-### File: `app/api/test-connection/librechat/route.ts`
-```typescript
-import { NextResponse } from 'next/server';
-import { libreChatService } from '@/lib/services/librechat';
+model CalendarAccount {
+  id               String    @id @default(uuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-export async function GET() {
-  const result = await libreChatService.testConnection();
-  return NextResponse.json(result);
+  name             String
+  provider         String    // caldav, microsoft_oauth, google_oauth
+  calendarUrl      String?   // For CalDAV
+
+  // OAuth tokens (encrypted)
+  oauthAccessToken  String?
+  oauthRefreshToken String?
+  oauthExpiresAt    DateTime?
+
+  isDefault        Boolean   @default(false)
+  syncStatus       String    @default("idle")
+  lastSyncAt       DateTime?
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+// Update User model to add relations
+model User {
+  // ... existing fields ...
+  emailAccounts     EmailAccount[]
+  calendarAccounts  CalendarAccount[]
 }
 ```
 
 ### File: `app/(auth)/settings/page.tsx`
-```typescript
-'use client';
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+```typescript
+"use client";
+
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   CheckCircle,
   XCircle,
   RefreshCw,
-  Database,
-  Cloud,
-  Bot,
+  Plus,
+  Trash2,
+  Mail,
+  Calendar,
   Zap,
-} from 'lucide-react';
+  Bot,
+  Database,
+} from "lucide-react";
 
-interface ConnectionStatus {
-  status: 'connected' | 'disconnected' | 'checking' | 'unknown';
-  latency?: number;
-  error?: string;
-  lastChecked?: string;
-}
-
-interface ServiceConfig {
+interface EmailAccount {
   id: string;
   name: string;
-  icon: React.ComponentType<{ className?: string }>;
-  endpoint: string;
+  email: string;
+  provider: string;
+  isDefault: boolean;
+  syncStatus: string;
+  lastSyncAt: string | null;
 }
 
-const services: ServiceConfig[] = [
-  { id: 'database', name: 'Database (Supabase)', icon: Database, endpoint: '' },
-  { id: 'microsoft', name: 'Microsoft Graph', icon: Cloud, endpoint: '/api/test-connection/microsoft' },
-  { id: 'n8n', name: 'n8n Workflows', icon: Zap, endpoint: '/api/test-connection/n8n' },
-  { id: 'librechat', name: 'LibreChat AI', icon: Bot, endpoint: '/api/test-connection/librechat' },
-];
+interface ServiceStatus {
+  status: "connected" | "disconnected" | "checking";
+  latency?: number;
+  error?: string;
+}
 
 export default function SettingsPage() {
-  const [statuses, setStatuses] = useState<Record<string, ConnectionStatus>>({});
-  const [isChecking, setIsChecking] = useState(false);
+  const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([]);
+  const [serviceStatuses, setServiceStatuses] = useState<Record<string, ServiceStatus>>({});
+  const [isAddingAccount, setIsAddingAccount] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const checkAllConnections = async () => {
-    setIsChecking(true);
+  // Form state for adding email account
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    imapHost: "",
+    imapPort: 993,
+    smtpHost: "",
+    smtpPort: 587,
+    username: "",
+    password: "",
+  });
+  const [formError, setFormError] = useState("");
+  const [isTesting, setIsTesting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-    // Check health endpoint for overall status
-    try {
-      const healthResponse = await fetch('/api/health');
-      const health = await healthResponse.json();
-
-      const newStatuses: Record<string, ConnectionStatus> = {};
-
-      for (const [key, value] of Object.entries(health.services)) {
-        const service = value as any;
-        newStatuses[key] = {
-          status: service.status === 'connected' ? 'connected' : 'disconnected',
-          latency: service.latency,
-          error: service.error,
-          lastChecked: service.lastChecked,
-        };
-      }
-
-      setStatuses(newStatuses);
-    } catch (error) {
-      console.error('Health check failed:', error);
-    }
-
-    setIsChecking(false);
-  };
-
-  const checkSingleConnection = async (serviceId: string, endpoint: string) => {
-    if (!endpoint) return;
-
-    setStatuses((prev) => ({
-      ...prev,
-      [serviceId]: { status: 'checking' },
-    }));
-
-    try {
-      const response = await fetch(endpoint);
-      const result = await response.json();
-
-      setStatuses((prev) => ({
-        ...prev,
-        [serviceId]: {
-          status: result.success ? 'connected' : 'disconnected',
-          error: result.error,
-          lastChecked: new Date().toISOString(),
-        },
-      }));
-    } catch (error) {
-      setStatuses((prev) => ({
-        ...prev,
-        [serviceId]: {
-          status: 'disconnected',
-          error: (error as Error).message,
-          lastChecked: new Date().toISOString(),
-        },
-      }));
-    }
-  };
-
+  // Fetch email accounts
   useEffect(() => {
-    checkAllConnections();
+    fetchEmailAccounts();
+    checkServiceHealth();
   }, []);
 
-  const getStatusBadge = (status: ConnectionStatus['status']) => {
-    switch (status) {
-      case 'connected':
-        return (
-          <Badge className="bg-green-100 text-green-800">
-            <CheckCircle className="mr-1 h-3 w-3" />
-            Connected
-          </Badge>
-        );
-      case 'disconnected':
-        return (
-          <Badge className="bg-red-100 text-red-800">
-            <XCircle className="mr-1 h-3 w-3" />
-            Disconnected
-          </Badge>
-        );
-      case 'checking':
-        return (
-          <Badge className="bg-yellow-100 text-yellow-800">
-            <RefreshCw className="mr-1 h-3 w-3 animate-spin" />
-            Checking...
-          </Badge>
-        );
-      default:
-        return (
-          <Badge className="bg-gray-100 text-gray-800">
-            Unknown
-          </Badge>
-        );
+  const fetchEmailAccounts = async () => {
+    try {
+      const response = await fetch("/api/accounts/email");
+      const data = await response.json();
+      setEmailAccounts(data.accounts || []);
+    } catch (error) {
+      console.error("Failed to fetch accounts:", error);
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  const checkServiceHealth = async () => {
+    try {
+      const response = await fetch("/api/health");
+      const health = await response.json();
+
+      const statuses: Record<string, ServiceStatus> = {};
+      for (const [key, value] of Object.entries(health.services)) {
+        const service = value as any;
+        statuses[key] = {
+          status: service.status === "connected" ? "connected" : "disconnected",
+          latency: service.latency,
+          error: service.error,
+        };
+      }
+      setServiceStatuses(statuses);
+    } catch (error) {
+      console.error("Health check failed:", error);
+    }
+  };
+
+  const testConnection = async () => {
+    setIsTesting(true);
+    setFormError("");
+
+    try {
+      const response = await fetch("/api/accounts/email/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imapHost: formData.imapHost,
+          imapPort: formData.imapPort,
+          username: formData.username,
+          password: formData.password,
+        }),
+      });
+
+      const result = await response.json();
+      if (!result.success) {
+        setFormError(result.error || "Connection test failed");
+      } else {
+        setFormError("");
+        alert("Connection successful!");
+      }
+    } catch (error) {
+      setFormError("Connection test failed");
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const saveAccount = async () => {
+    setIsSaving(true);
+    setFormError("");
+
+    try {
+      const response = await fetch("/api/accounts/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        setFormError(result.error || "Failed to save account");
+        return;
+      }
+
+      // Refresh accounts list
+      await fetchEmailAccounts();
+      setIsAddingAccount(false);
+      resetForm();
+    } catch (error) {
+      setFormError("Failed to save account");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const deleteAccount = async (accountId: string) => {
+    if (!confirm("Are you sure you want to remove this account?")) return;
+
+    try {
+      await fetch(`/api/accounts/email?id=${accountId}`, { method: "DELETE" });
+      await fetchEmailAccounts();
+    } catch (error) {
+      console.error("Failed to delete account:", error);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      email: "",
+      imapHost: "",
+      imapPort: 993,
+      smtpHost: "",
+      smtpPort: 587,
+      username: "",
+      password: "",
+    });
+    setFormError("");
+  };
+
+  const getStatusBadge = (status: string) => {
+    if (status === "connected") {
+      return (
+        <Badge className="bg-green-100 text-green-800">
+          <CheckCircle className="mr-1 h-3 w-3" />
+          Connected
+        </Badge>
+      );
+    }
+    return (
+      <Badge className="bg-red-100 text-red-800">
+        <XCircle className="mr-1 h-3 w-3" />
+        Disconnected
+      </Badge>
+    );
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-          <p className="text-gray-600">Manage your connections and preferences</p>
-        </div>
-        <Button onClick={checkAllConnections} disabled={isChecking}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${isChecking ? 'animate-spin' : ''}`} />
-          Check All
-        </Button>
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+        <p className="text-gray-600">Manage your account connections and preferences</p>
       </div>
 
+      {/* Email Accounts */}
       <Card>
-        <CardHeader>
-          <CardTitle>Service Connections</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {services.map((service) => {
-            const status = statuses[service.id] || { status: 'unknown' };
-            const Icon = service.icon;
-
-            return (
-              <div
-                key={service.id}
-                className="flex items-center justify-between rounded-lg border p-4"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100">
-                    <Icon className="h-5 w-5 text-gray-600" />
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Email Accounts
+            </CardTitle>
+            <CardDescription>Connect your email accounts to capture messages</CardDescription>
+          </div>
+          <Dialog open={isAddingAccount} onOpenChange={setIsAddingAccount}>
+            <DialogTrigger asChild>
+              <Button onClick={() => setIsAddingAccount(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Account
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Add Email Account (IMAP)</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                {formError && (
+                  <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                    {formError}
                   </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{service.name}</p>
-                    {status.error && (
-                      <p className="text-sm text-red-600">{status.error}</p>
-                    )}
-                    {status.latency && (
-                      <p className="text-sm text-gray-500">
-                        Latency: {status.latency}ms
-                      </p>
-                    )}
-                    {status.lastChecked && (
-                      <p className="text-xs text-gray-400">
-                        Last checked: {new Date(status.lastChecked).toLocaleTimeString()}
-                      </p>
-                    )}
+                )}
+
+                <div className="space-y-2">
+                  <Label>Account Name</Label>
+                  <Input
+                    placeholder="e.g., Work Email"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Email Address</Label>
+                  <Input
+                    type="email"
+                    placeholder="you@example.com"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>IMAP Host</Label>
+                    <Input
+                      placeholder="imap.example.com"
+                      value={formData.imapHost}
+                      onChange={(e) => setFormData({ ...formData, imapHost: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>IMAP Port</Label>
+                    <Input
+                      type="number"
+                      value={formData.imapPort}
+                      onChange={(e) =>
+                        setFormData({ ...formData, imapPort: parseInt(e.target.value) })
+                      }
+                    />
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {getStatusBadge(status.status)}
-                  {service.endpoint && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => checkSingleConnection(service.id, service.endpoint)}
-                      disabled={status.status === 'checking'}
-                    >
-                      Test
-                    </Button>
-                  )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>SMTP Host</Label>
+                    <Input
+                      placeholder="smtp.example.com"
+                      value={formData.smtpHost}
+                      onChange={(e) => setFormData({ ...formData, smtpHost: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>SMTP Port</Label>
+                    <Input
+                      type="number"
+                      value={formData.smtpPort}
+                      onChange={(e) =>
+                        setFormData({ ...formData, smtpPort: parseInt(e.target.value) })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Username</Label>
+                  <Input
+                    placeholder="Usually your email address"
+                    value={formData.username}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>App Password</Label>
+                  <Input
+                    type="password"
+                    placeholder="App-specific password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  />
+                  <p className="text-xs text-gray-500">
+                    Use an app-specific password, not your regular password
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={testConnection} disabled={isTesting}>
+                    {isTesting ? "Testing..." : "Test Connection"}
+                  </Button>
+                  <Button onClick={saveAccount} disabled={isSaving} className="flex-1">
+                    {isSaving ? "Saving..." : "Save Account"}
+                  </Button>
                 </div>
               </div>
-            );
-          })}
+            </DialogContent>
+          </Dialog>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <p className="text-gray-500">Loading...</p>
+          ) : emailAccounts.length === 0 ? (
+            <p className="text-gray-500">No email accounts connected</p>
+          ) : (
+            <div className="space-y-3">
+              {emailAccounts.map((account) => (
+                <div
+                  key={account.id}
+                  className="flex items-center justify-between p-3 border rounded-lg"
+                >
+                  <div className="flex items-center gap-3">
+                    <Mail className="h-5 w-5 text-gray-400" />
+                    <div>
+                      <p className="font-medium">{account.name}</p>
+                      <p className="text-sm text-gray-500">{account.email}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {getStatusBadge(account.syncStatus === "error" ? "disconnected" : "connected")}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => deleteAccount(account.id)}
+                    >
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
+      {/* System Services */}
       <Card>
         <CardHeader>
-          <CardTitle>Environment</CardTitle>
+          <CardTitle>System Services</CardTitle>
+          <CardDescription>Backend service connections</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="grid gap-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Version</span>
-              <span className="font-mono">{process.env.npm_package_version || '0.1.0'}</span>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between p-3 border rounded-lg">
+            <div className="flex items-center gap-3">
+              <Database className="h-5 w-5 text-gray-400" />
+              <div>
+                <p className="font-medium">Database</p>
+                <p className="text-sm text-gray-500">Supabase PostgreSQL</p>
+              </div>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Environment</span>
-              <span className="font-mono">{process.env.NODE_ENV}</span>
-            </div>
+            {getStatusBadge(serviceStatuses.database?.status || "disconnected")}
           </div>
+
+          <div className="flex items-center justify-between p-3 border rounded-lg">
+            <div className="flex items-center gap-3">
+              <Zap className="h-5 w-5 text-gray-400" />
+              <div>
+                <p className="font-medium">n8n Workflows</p>
+                <p className="text-sm text-gray-500">Automation engine</p>
+              </div>
+            </div>
+            {getStatusBadge(serviceStatuses.n8n?.status || "disconnected")}
+          </div>
+
+          <div className="flex items-center justify-between p-3 border rounded-lg">
+            <div className="flex items-center gap-3">
+              <Bot className="h-5 w-5 text-gray-400" />
+              <div>
+                <p className="font-medium">LibreChat AI</p>
+                <p className="text-sm text-gray-500">AI chat service</p>
+              </div>
+            </div>
+            {getStatusBadge(serviceStatuses.librechat?.status || "disconnected")}
+          </div>
+
+          <Button variant="outline" onClick={checkServiceHealth} className="w-full">
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Refresh Status
+          </Button>
         </CardContent>
       </Card>
     </div>
@@ -708,55 +1046,34 @@ export default function SettingsPage() {
 }
 ```
 
-### n8n Test Workflow (to be created in n8n)
-
-Create a workflow in n8n with:
-1. **Webhook Trigger**: Path `/test`, Method: POST
-2. **Validate Secret**: Check `X-Webhook-Secret` header
-3. **Respond**: Return `{ "status": "ok", "timestamp": "..." }`
-
-```json
-{
-  "nodes": [
-    {
-      "name": "Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "test",
-        "responseMode": "responseNode"
-      }
-    },
-    {
-      "name": "Respond",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { \"status\": \"ok\", \"timestamp\": $now.toISO() } }}"
-      }
-    }
-  ]
-}
-```
-
 ## Files to Create/Modify
 
-| File | Action | Purpose |
-|------|--------|---------|
-| `app/api/health/route.ts` | Create | Health check endpoint |
-| `app/api/test-connection/microsoft/route.ts` | Create | Microsoft test endpoint |
-| `app/api/test-connection/n8n/route.ts` | Create | n8n test endpoint |
-| `app/api/test-connection/librechat/route.ts` | Create | LibreChat test endpoint |
-| `lib/services/microsoft-graph.ts` | Create | Microsoft Graph service |
-| `lib/services/n8n.ts` | Create | n8n service client |
-| `lib/services/librechat.ts` | Create | LibreChat service client |
-| `app/(auth)/settings/page.tsx` | Update | Connection status UI |
-| `.env.example` | Update | Document all env vars |
-| `README.md` | Update | Add connection setup docs |
+| File                                   | Action | Purpose                      |
+| -------------------------------------- | ------ | ---------------------------- |
+| `lib/encryption.ts`                    | Create | Credential encryption        |
+| `server/services/account.service.ts`   | Create | Email account management     |
+| `app/api/health/route.ts`              | Create | Health check endpoint        |
+| `app/api/accounts/email/route.ts`      | Create | Email account CRUD           |
+| `app/api/accounts/email/test/route.ts` | Create | Test IMAP connection         |
+| `app/(auth)/settings/page.tsx`         | Update | Settings with accounts       |
+| `packages/db/prisma/schema.prisma`     | Modify | Add EmailAccount model       |
+| `.env.local`                           | Update | Add ENCRYPTION_KEY           |
+| `.env.example`                         | Update | Document env vars            |
+
+## Dependencies to Install
+
+```bash
+pnpm add imap
+pnpm add -D @types/imap
+```
 
 ## Environment Variables Required
 
 ```bash
+# Encryption Key for storing credentials
+# Generate with: openssl rand -hex 32
+ENCRYPTION_KEY="64-character-hex-string"
+
 # n8n Integration
 N8N_WEBHOOK_URL="https://n8n.yourdomain.com/webhook"
 N8N_WEBHOOK_SECRET="shared-secret-for-auth"
@@ -765,9 +1082,9 @@ N8N_WEBHOOK_SECRET="shared-secret-for-auth"
 LIBRECHAT_URL="https://chat.yourdomain.com"
 LIBRECHAT_API_KEY="your-api-key"
 
-# Already configured in Story 1.3
-MICROSOFT_CLIENT_ID="..."
-MICROSOFT_CLIENT_SECRET="..."
+# Optional: Microsoft OAuth for enhanced Outlook
+MICROSOFT_CLIENT_ID="your-microsoft-client-id"
+MICROSOFT_CLIENT_SECRET="your-microsoft-client-secret"
 ```
 
 ## Testing Requirements
@@ -780,72 +1097,65 @@ MICROSOFT_CLIENT_SECRET="..."
    ```
    Verify response includes all services with status
 
-2. **Microsoft Connection**:
-   - Log in to app
+2. **Add Email Account**:
    - Go to Settings
-   - Click "Test" on Microsoft Graph
-   - Should show "Connected" with profile info
+   - Click "Add Account"
+   - Enter IMAP credentials
+   - Click "Test Connection" - should succeed
+   - Click "Save Account"
+   - Account should appear in list
 
-3. **n8n Connection**:
-   - Ensure n8n is running with test workflow
-   - Click "Test" on n8n
-   - Should show "Connected"
-
-4. **LibreChat Connection**:
-   - Ensure LibreChat is running
-   - Click "Test" on LibreChat
-   - Should show "Connected"
+3. **Delete Account**:
+   - Click trash icon on account
+   - Confirm deletion
+   - Account should be removed
 
 ### Edge Cases
-- Test with n8n offline - should show "Disconnected"
-- Test with expired Microsoft token - should refresh and connect
-- Test with wrong webhook secret - should show auth error
+
+- Test with invalid IMAP credentials - should show error
+- Test with n8n offline - health check should show disconnected
+- Test encryption/decryption with special characters
 
 ## Definition of Done
 
 - [ ] All acceptance criteria met
-- [ ] Health endpoint returns status for all services
-- [ ] Microsoft Graph connection works (profile fetch)
-- [ ] n8n webhook connection works (test workflow)
-- [ ] LibreChat connection works (health check)
-- [ ] Settings page shows all connection statuses
-- [ ] Test buttons work for individual services
+- [ ] EmailAccount model in database
+- [ ] IMAP accounts can be added and tested
+- [ ] Credentials encrypted in database
+- [ ] Health endpoint returns all service statuses
+- [ ] Settings page shows connected accounts
+- [ ] Can remove email accounts
 - [ ] Environment variables documented
-- [ ] README updated with setup instructions
-- [ ] Error messages are clear and actionable
 
 ## Notes & Decisions
 
-- **Health endpoint is public**: Allows monitoring tools to check status without auth
-- **5-second timeouts**: Prevent health checks from hanging
-- **Parallel health checks**: All services checked concurrently for speed
-- **Test workflow in n8n**: Simple ping/pong to verify connectivity
+- **IMAP as primary**: Works with any email provider, no OAuth app registration needed
+- **Encrypted storage**: AES-256-GCM for credential security
+- **Separate from app auth**: Email provider is not same as app login
+- **OAuth optional**: Users can add OAuth later if they want enhanced features
+- **App-specific passwords**: Required for most providers, more secure
 
 ## Troubleshooting Guide
 
-### Microsoft Graph Errors
-| Error | Cause | Solution |
-|-------|-------|----------|
-| `token_expired` | Access token expired | Should auto-refresh; re-login if persists |
-| `insufficient_scope` | Missing permissions | Check Azure app registration |
-| `network_error` | Can't reach Graph API | Check firewall/proxy settings |
+### IMAP Connection Errors
 
-### n8n Errors
-| Error | Cause | Solution |
-|-------|-------|----------|
-| `ECONNREFUSED` | n8n not running | Start n8n instance |
-| `401 Unauthorized` | Wrong webhook secret | Check N8N_WEBHOOK_SECRET |
-| `timeout` | n8n slow/unresponsive | Check n8n resources/logs |
+| Error                | Cause                    | Solution                              |
+| -------------------- | ------------------------ | ------------------------------------- |
+| `AUTHENTICATIONFAILED` | Wrong credentials      | Verify username/password              |
+| `Connection refused` | Wrong host/port          | Check IMAP host and port settings     |
+| `Certificate error`  | TLS issues               | Try different port or check settings  |
+| `Timeout`            | Firewall blocking        | Check network/firewall settings       |
 
-### LibreChat Errors
-| Error | Cause | Solution |
-|-------|-------|----------|
-| `ECONNREFUSED` | LibreChat not running | Start LibreChat instance |
-| `401 Unauthorized` | Wrong API key | Check LIBRECHAT_API_KEY |
-| `404` | Wrong endpoint | Verify LibreChat API docs |
+### Common IMAP Settings
+
+| Provider    | IMAP Host           | Port | SMTP Host           | Port |
+| ----------- | ------------------- | ---- | ------------------- | ---- |
+| Gmail       | imap.gmail.com      | 993  | smtp.gmail.com      | 587  |
+| Outlook     | outlook.office365.com | 993 | smtp.office365.com  | 587  |
+| Yahoo       | imap.mail.yahoo.com | 993  | smtp.mail.yahoo.com | 587  |
+| iCloud      | imap.mail.me.com    | 993  | smtp.mail.me.com    | 587  |
 
 ## Related Documentation
 
-- [Architecture Document](../../architecture.md) - External API specs
+- [Architecture Document](../../architecture.md) - Service authentication flow
 - [n8n Documentation](https://docs.n8n.io/) - Workflow setup
-- [Microsoft Graph Docs](https://docs.microsoft.com/en-us/graph/) - API reference
