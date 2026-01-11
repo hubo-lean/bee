@@ -13,6 +13,8 @@ import {
   Settings,
   Calendar,
 } from "lucide-react";
+import { SidebarCaptureButton } from "@/components/capture/sidebar-capture-button";
+import { InboxBadge } from "./inbox-badge";
 
 interface SidebarProps {
   user: {
@@ -24,12 +26,12 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { href: "/dashboard", label: "Home", icon: Home },
-  { href: "/inbox", label: "Inbox", icon: Inbox },
-  { href: "/review", label: "Review", icon: PlayCircle },
-  { href: "/search", label: "Search", icon: Search },
-  { href: "/calendar", label: "Calendar", icon: Calendar },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard", label: "Home", icon: Home, showBadge: false },
+  { href: "/inbox", label: "Inbox", icon: Inbox, showBadge: true },
+  { href: "/review", label: "Review", icon: PlayCircle, showBadge: false },
+  { href: "/search", label: "Search", icon: Search, showBadge: false },
+  { href: "/calendar", label: "Calendar", icon: Calendar, showBadge: false },
+  { href: "/settings", label: "Settings", icon: Settings, showBadge: false },
 ];
 
 export function Sidebar({ user, className }: SidebarProps) {
@@ -55,6 +57,11 @@ export function Sidebar({ user, className }: SidebarProps) {
         </Link>
       </div>
 
+      {/* Quick Capture Button */}
+      <div className="px-3 pt-4">
+        <SidebarCaptureButton />
+      </div>
+
       {/* Navigation */}
       <nav className="flex-1 space-y-1 px-3 py-4" aria-label="Sidebar">
         {navItems.map((item) => {
@@ -72,7 +79,8 @@ export function Sidebar({ user, className }: SidebarProps) {
               aria-current={isActive ? "page" : undefined}
             >
               <item.icon className="h-5 w-5" aria-hidden="true" />
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              {item.showBadge && <InboxBadge />}
             </Link>
           );
         })}

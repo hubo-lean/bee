@@ -34,6 +34,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { EmailForwardSetup } from "@/components/settings/email-forward-setup";
 
 interface EmailAccount {
   id: string;
@@ -485,6 +486,9 @@ export default function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Email Forwarding Section */}
+      <EmailForwardSetup />
 
       {/* System Services Section */}
       <Card>

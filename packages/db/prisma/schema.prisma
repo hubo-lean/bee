@@ -37,6 +37,9 @@ model User {
   // External service connections
   emailAccounts    EmailAccount[]
   calendarAccounts CalendarAccount[]
+
+  // User tokens (email forwarding, API keys, etc.)
+  tokens UserToken[]
 }
 
 model Account {
@@ -360,5 +363,18 @@ model CalendarAccount {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([userId])
+}
+
+model UserToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique
+  type      String    // "email_forward", "api_key", etc.
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+
+  @@index([token])
   @@index([userId])
 }
