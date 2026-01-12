@@ -92,10 +92,11 @@ export default function DailyReviewPage() {
 
   // Start session if none exists
   useEffect(() => {
-    if (!sessionLoading && !session) {
+    if (!sessionLoading && !session && !startSession.isPending) {
       startSession.mutate({});
     }
-  }, [sessionLoading, session, startSession]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionLoading, session]);
 
   // Auto-save session activity periodically
   useEffect(() => {

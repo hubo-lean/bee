@@ -23,35 +23,113 @@ interface InboxStepProps {
 export function InboxStep({ onComplete, onBack }: InboxStepProps) {
   const utils = trpc.useUtils();
 
-  const { data: needsReview, isLoading: needsReviewLoading } =
-    trpc.weeklyReview.getNeedsReview.useQuery();
-  const { data: disagreements, isLoading: disagreementsLoading } =
-    trpc.weeklyReview.getDisagreements.useQuery();
-  const { data: projects } = trpc.para.listProjects.useQuery({ status: "active" });
-  const { data: areas } = trpc.para.listAreas.useQuery();
+  // Use combined endpoint for parallel data fetching (eliminates waterfall)
+  const { data: inboxStepData, isLoading } =
+    trpc.weeklyReview.getInboxStepData.useQuery();
+
+  // Destructure data from combined endpoint
+  const needsReview = inboxStepData?.needsReview;
+  const disagreements = inboxStepData?.disagreements;
+  const projects = inboxStepData?.projects;
+  const areas = inboxStepData?.areas;
 
   const archiveItem = trpc.weeklyReview.archiveItem.useMutation({
-    onSuccess: () => {
-      utils.weeklyReview.getNeedsReview.invalidate();
-      utils.weeklyReview.getDisagreements.invalidate();
+    // Optimistic update: remove item immediately before server responds
+    onMutate: async ({ id }) => {
+      // Cancel outgoing fetches to prevent race conditions
+      await utils.weeklyReview.getInboxStepData.cancel();
+
+      // Snapshot current data for rollback
+      const previousData = utils.weeklyReview.getInboxStepData.getData();
+
+      // Optimistically remove item from both queues
+      utils.weeklyReview.getInboxStepData.setData(undefined, (old) =>
+        old
+          ? {
+              ...old,
+              needsReview: old.needsReview.filter((item) => item.id !== id),
+              disagreements: old.disagreements.filter((item) => item.id !== id),
+            }
+          : old
+      );
+
+      return { previousData };
+    },
+    // Rollback on error
+    onError: (_err, _variables, context) => {
+      if (context?.previousData) {
+        utils.weeklyReview.getInboxStepData.setData(undefined, context.previousData);
+      }
+    },
+    // Refetch after mutation settles for consistency
+    onSettled: () => {
+      utils.weeklyReview.getInboxStepData.invalidate();
     },
   });
 
   const fileItem = trpc.para.fileItem.useMutation({
-    onSuccess: () => {
-      utils.weeklyReview.getNeedsReview.invalidate();
-      utils.weeklyReview.getDisagreements.invalidate();
+    // Optimistic update: remove item immediately before server responds
+    onMutate: async ({ inboxItemId }) => {
+      // Cancel outgoing fetches to prevent race conditions
+      await utils.weeklyReview.getInboxStepData.cancel();
+
+      // Snapshot current data for rollback
+      const previousData = utils.weeklyReview.getInboxStepData.getData();
+
+      // Optimistically remove item from both queues
+      utils.weeklyReview.getInboxStepData.setData(undefined, (old) =>
+        old
+          ? {
+              ...old,
+              needsReview: old.needsReview.filter((item) => item.id !== inboxItemId),
+              disagreements: old.disagreements.filter((item) => item.id !== inboxItemId),
+            }
+          : old
+      );
+
+      return { previousData };
+    },
+    // Rollback on error
+    onError: (_err, _variables, context) => {
+      if (context?.previousData) {
+        utils.weeklyReview.getInboxStepData.setData(undefined, context.previousData);
+      }
+    },
+    // Refetch after mutation settles for consistency
+    onSettled: () => {
+      utils.weeklyReview.getInboxStepData.invalidate();
     },
   });
 
   const archiveAll = trpc.weeklyReview.archiveAll.useMutation({
-    onSuccess: () => {
-      utils.weeklyReview.getNeedsReview.invalidate();
-      utils.weeklyReview.getDisagreements.invalidate();
+    // Optimistic update: clear entire queue immediately
+    onMutate: async ({ queue }) => {
+      await utils.weeklyReview.getInboxStepData.cancel();
+
+      const previousData = utils.weeklyReview.getInboxStepData.getData();
+
+      // Optimistically clear the target queue
+      utils.weeklyReview.getInboxStepData.setData(undefined, (old) =>
+        old
+          ? {
+              ...old,
+              needsReview: queue === "needsReview" ? [] : old.needsReview,
+              disagreements: queue === "disagreements" ? [] : old.disagreements,
+            }
+          : old
+      );
+
+      return { previousData };
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previousData) {
+        utils.weeklyReview.getInboxStepData.setData(undefined, context.previousData);
+      }
+    },
+    onSettled: () => {
+      utils.weeklyReview.getInboxStepData.invalidate();
     },
   });
-
-  const isLoading = needsReviewLoading || disagreementsLoading;
 
   const needsReviewCount = needsReview?.length ?? 0;
   const disagreementsCount = disagreements?.length ?? 0;

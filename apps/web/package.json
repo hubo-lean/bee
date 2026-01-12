@@ -40,6 +40,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.25.0",
+    "googleapis": "^170.0.0",
     "ical.js": "^2.2.1",
     "imap": "^0.8.19",
     "lucide-react": "^0.562.0",

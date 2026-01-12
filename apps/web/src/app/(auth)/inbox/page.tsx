@@ -6,6 +6,7 @@ import { InboxList } from "@/components/inbox/inbox-list";
 import { InboxItemDetail } from "@/components/inbox/inbox-item-detail";
 import { EmptyInbox } from "@/components/inbox/empty-inbox";
 import { InboxSkeleton } from "@/components/inbox/inbox-skeleton";
+import { GmailSyncButton } from "@/components/inbox/gmail-sync-button";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 
@@ -68,17 +69,20 @@ export default function InboxPage() {
             <h1 className="text-xl font-semibold text-gray-900">Inbox</h1>
             <p className="text-sm text-gray-500">{items.length} items</p>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => refetch()}
-            disabled={isRefetching}
-            aria-label="Refresh inbox"
-          >
-            <RefreshCw
-              className={`h-5 w-5 ${isRefetching ? "animate-spin" : ""}`}
-            />
-          </Button>
+          <div className="flex items-center gap-2">
+            <GmailSyncButton />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => refetch()}
+              disabled={isRefetching}
+              aria-label="Refresh inbox"
+            >
+              <RefreshCw
+                className={`h-5 w-5 ${isRefetching ? "animate-spin" : ""}`}
+              />
+            </Button>
+          </div>
         </div>
       </header>
 

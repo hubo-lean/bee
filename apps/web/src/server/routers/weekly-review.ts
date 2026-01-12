@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { router, protectedProcedure } from "../trpc";
+import { prisma } from "@packages/db";
 import { TRPCError } from "@trpc/server";
 import {
   getCurrentSession,
@@ -147,6 +148,32 @@ export const weeklyReviewRouter = router({
     }),
 
   // Inbox queue procedures for Story 5.4
+
+  /**
+   * Get all data needed for the inbox step in a single call
+   * Eliminates waterfall by parallelizing all queries
+   */
+  getInboxStepData: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.session.user.id;
+
+    // Run all queries in parallel
+    const [needsReview, disagreements, projects, areas] = await Promise.all([
+      getNeedsReviewQueue(userId),
+      getDisagreementsQueue(userId),
+      prisma.project.findMany({
+        where: { userId, status: "active" },
+        select: { id: true, name: true, color: true },
+        orderBy: { name: "asc" },
+      }),
+      prisma.area.findMany({
+        where: { userId },
+        select: { id: true, name: true, icon: true },
+        orderBy: { sortOrder: "asc" },
+      }),
+    ]);
+
+    return { needsReview, disagreements, projects, areas };
+  }),
 
   /**
    * Get items that need review (low confidence)

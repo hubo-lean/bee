@@ -15,8 +15,15 @@ function getN8nConfig() {
 
 /**
  * n8n service client for webhook interactions
+ *
+ * Story 7.2 Note: Classification is now handled directly via OpenAI
+ * (see ai-classification.service.ts). n8n is kept for complex workflows
+ * like calendar sync, email forwarding, etc.
+ *
+ * The triggerClassification method is deprecated but kept for backwards
+ * compatibility.
  */
-// Classification request payload
+// Classification request payload (deprecated - see ai-classification.service.ts)
 export interface ClassificationRequest {
   inboxItemId: string;
   content: string;
@@ -142,6 +149,9 @@ export const n8nService = {
 
   /**
    * Trigger classification workflow for an inbox item
+   * @deprecated Story 7.2: Use aiClassificationService.classifyItem() instead
+   * This method is kept for backwards compatibility but classification
+   * is now handled directly via OpenAI.
    */
   async triggerClassification(
     inboxItem: {

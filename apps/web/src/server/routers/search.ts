@@ -29,6 +29,7 @@ export const searchRouter = router({
         filters: filtersSchema.optional(),
         limit: z.number().min(1).max(100).default(20),
         useSemantic: z.boolean().default(true),
+        hydrate: z.boolean().default(false),
       })
     )
     .query(async ({ ctx, input }) => {
@@ -43,12 +44,18 @@ export const searchRouter = router({
           ctx.userId,
           input.query,
           input.filters,
-          input.limit
+          input.limit,
+          { hydrate: input.hydrate }
         );
       }
 
-      // Fallback to quick text search
-      return quickTextSearch(ctx.userId, input.query, input.limit);
+      // Fallback to quick text search (returns same structure as semantic search)
+      const results = await quickTextSearch(ctx.userId, input.query, input.limit);
+      return {
+        results,
+        total: results.length,
+        latencyMs: 0,
+      };
     }),
 
   reindex: protectedProcedure.mutation(async ({ ctx }) => {

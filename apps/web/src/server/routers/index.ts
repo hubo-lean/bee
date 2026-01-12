@@ -7,6 +7,7 @@ import { weeklyReviewRouter } from "./weekly-review";
 import { paraRouter } from "./para";
 import { calendarRouter } from "./calendar";
 import { searchRouter } from "./search";
+import { gmailRouter } from "./gmail";
 
 export const appRouter = router({
   inbox: inboxRouter,
@@ -17,6 +18,7 @@ export const appRouter = router({
   para: paraRouter,
   calendar: calendarRouter,
   search: searchRouter,
+  gmail: gmailRouter,
 });
 
 export type AppRouter = typeof appRouter;

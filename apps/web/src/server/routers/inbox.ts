@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { router, protectedProcedure } from "../trpc";
 import { prisma } from "@packages/db";
-import { n8nService } from "@/lib/services/n8n";
+import { TRPCError } from "@trpc/server";
+import { aiClassificationService } from "../services/ai-classification.service";
 import { classificationService, type ProcessingMeta } from "../services/classification.service";
 import {
   getAutoArchiveWarnings,
@@ -52,21 +53,32 @@ export const inboxRouter = router({
           content: input.content || `Image captured at ${new Date().toISOString()}`,
           source: input.source,
           mediaUrl: input.mediaUrl,
-          status: "pending",
+          status: "processing", // Story 7.2: Start with processing status
         },
       });
 
-      // Trigger AI classification asynchronously (fire-and-forget)
+      // Story 7.2: Trigger AI classification asynchronously (fire-and-forget)
+      // Uses direct OpenAI integration instead of n8n
       // Only classify text-based items (not images without content)
       if (inboxItem.content && inboxItem.type !== "image") {
-        n8nService.triggerClassification({
-          id: inboxItem.id,
-          content: inboxItem.content,
-          source: inboxItem.source,
-          type: inboxItem.type,
-          createdAt: inboxItem.createdAt,
-        }).catch((error) => {
-          console.error("[InboxRouter] Failed to trigger classification:", error);
+        // Get user context for better classification
+        aiClassificationService
+          .getUserContext(ctx.userId)
+          .then((context) =>
+            aiClassificationService.classifyItem(inboxItem.id, inboxItem.content, {
+              ...context,
+              source: inboxItem.source,
+            })
+          )
+          .catch((error) => {
+            console.error("[InboxRouter] Failed to classify item:", error);
+            // Item is already marked as pending/error by the service on failure
+          });
+      } else {
+        // For images or empty content, set to pending for manual review
+        await prisma.inboxItem.update({
+          where: { id: inboxItem.id },
+          data: { status: "pending" },
         });
       }
 
@@ -203,26 +215,33 @@ export const inboxRouter = router({
     }),
 
   // Story 3.5: Queue metrics for monitoring
+  // Optimized: Uses single groupBy query instead of 5 separate count queries
   queueMetrics: protectedProcedure.query(async ({ ctx }) => {
-    const [pending, processing, error, reviewed, total] = await Promise.all([
-      prisma.inboxItem.count({
-        where: { userId: ctx.userId, status: "pending" },
-      }),
-      prisma.inboxItem.count({
-        where: { userId: ctx.userId, status: "processing" },
-      }),
-      prisma.inboxItem.count({
-        where: { userId: ctx.userId, status: "error" },
-      }),
-      prisma.inboxItem.count({
-        where: { userId: ctx.userId, status: "reviewed" },
-      }),
-      prisma.inboxItem.count({
+    const [counts, total] = await Promise.all([
+      prisma.inboxItem.groupBy({
+        by: ["status"],
         where: { userId: ctx.userId },
+        _count: { _all: true },
       }),
+      prisma.inboxItem.count({ where: { userId: ctx.userId } }),
     ]);
 
-    return { pending, processing, error, reviewed, total };
+    // Convert to object format
+    const statusCounts = counts.reduce(
+      (acc, { status, _count }) => {
+        acc[status] = _count._all;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
+
+    return {
+      pending: statusCounts.pending || 0,
+      processing: statusCounts.processing || 0,
+      error: statusCounts.error || 0,
+      reviewed: statusCounts.reviewed || 0,
+      total,
+    };
   }),
 
   // Story 3.5: Watch status for real-time polling
@@ -261,6 +280,7 @@ export const inboxRouter = router({
     }),
 
   // Story 3.5: Retry classification for error items
+  // Story 7.2: Updated to use direct OpenAI instead of n8n
   retryClassification: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
@@ -292,16 +312,18 @@ export const inboxRouter = router({
         return resetResult;
       }
 
-      // Trigger classification again
-      n8nService.triggerClassification({
-        id: item.id,
-        content: item.content,
-        source: item.source,
-        type: item.type,
-        createdAt: item.createdAt,
-      }).catch((error) => {
-        console.error("[InboxRouter] Failed to trigger retry classification:", error);
-      });
+      // Story 7.2: Trigger classification using direct OpenAI instead of n8n
+      aiClassificationService
+        .getUserContext(ctx.userId)
+        .then((context) =>
+          aiClassificationService.classifyItem(item.id, item.content, {
+            ...context,
+            source: item.source,
+          })
+        )
+        .catch((error) => {
+          console.error("[InboxRouter] Failed to trigger retry classification:", error);
+        });
 
       return { success: true };
     }),
@@ -345,6 +367,36 @@ export const inboxRouter = router({
           },
         };
       });
+    }),
+
+  // Story 7.2: Reclassify any item (not just errors)
+  reclassify: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify ownership
+      const item = await prisma.inboxItem.findFirst({
+        where: { id: input.id, userId: ctx.userId },
+        select: { id: true, content: true, source: true },
+      });
+
+      if (!item) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Item not found" });
+      }
+
+      // Update status to processing
+      await prisma.inboxItem.update({
+        where: { id: input.id },
+        data: { status: "processing" },
+      });
+
+      // Get user context and reclassify
+      const context = await aiClassificationService.getUserContext(ctx.userId);
+      const result = await aiClassificationService.classifyItem(item.id, item.content, {
+        ...context,
+        source: item.source,
+      });
+
+      return result;
     }),
 
   // Story 5.5: Auto-Archive & Bankruptcy

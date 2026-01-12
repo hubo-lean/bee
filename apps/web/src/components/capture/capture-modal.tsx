@@ -62,6 +62,7 @@ export function CaptureModal({ isOpen, onClose }: CaptureModalProps) {
       toast.success("Captured!", { duration: 2000 });
       resetForm();
       utils.inbox.count.invalidate();
+      onClose();
     },
     onError: (error) => {
       toast.error("Failed to capture", {

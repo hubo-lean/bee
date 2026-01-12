@@ -1,0 +1,55 @@
+schema: 1
+story: "7.5"
+story_title: "n8n Calendar Sync Workflow"
+gate: PASS
+status_reason: "Calendar sync workflow implemented with internal API endpoints, Google Calendar client, token refresh handling, and consecutive failure tracking."
+reviewer: "Quinn (Test Architect)"
+updated: "2026-01-12T14:30:00Z"
+
+waiver: { active: false }
+
+top_issues: []
+
+risk_summary:
+  totals: { critical: 0, high: 0, medium: 0, low: 1 }
+  recommendations:
+    must_fix: []
+    monitor:
+      - "n8n workflow JSON requires manual import into n8n instance"
+
+evidence:
+  tests_reviewed: 157
+  risks_identified: 1
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7]
+    ac_gaps: []
+
+nfr_validation:
+  security: { status: PASS, notes: "Internal API endpoints protected with X-Internal-Secret header" }
+  performance: { status: PASS, notes: "Event pagination, 30-day sync window" }
+  reliability: { status: PASS, notes: "Token refresh, consecutive failure tracking, auto-disable after 5 failures" }
+  maintainability: { status: PASS, notes: "Clean provider pattern for calendar clients" }
+
+analysis:
+  strengths:
+    - "Internal API endpoints for n8n workflow integration"
+    - "Google Calendar client with full OAuth2 and token refresh"
+    - "Token expiry detection with 5-minute buffer"
+    - "Consecutive failure tracking with auto-disable after 5 failures"
+    - "All-day event support with proper date handling"
+    - "Attendee response status mapping"
+    - "Event pagination for large calendars"
+    - "n8n workflow JSON exported for deployment"
+
+  verification:
+    - "google-client.ts: ensureValidToken at line 96 with 5-min buffer"
+    - "Event mapping handles all-day events at lines 164-170"
+    - "Internal endpoints at /api/internal/calendar-accounts and /sync-calendar"
+    - "Schema migration adds syncEnabled, tokenExpired, consecutiveFailures"
+    - "157 tests passing per story documentation (14 new Google Calendar tests)"
+
+recommendations:
+  immediate: []
+  future:
+    - action: "Persist refreshed tokens to database for long-lived sessions"
+      refs: ["apps/web/src/server/services/calendar/google-client.ts:107-114"]

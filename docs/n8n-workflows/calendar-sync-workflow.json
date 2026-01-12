@@ -1,0 +1,290 @@
+{
+  "name": "Bee Calendar Sync",
+  "nodes": [
+    {
+      "id": "schedule-trigger",
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "get-accounts",
+      "name": "Get Calendar Accounts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [470, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.BEE_API_URL }}/api/internal/calendar-accounts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Internal-Secret",
+              "value": "={{ $env.INTERNAL_API_SECRET }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      }
+    },
+    {
+      "id": "check-accounts",
+      "name": "Has Accounts?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [690, 300],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-count",
+              "leftValue": "={{ $json.count }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "extract-accounts",
+      "name": "Extract Accounts",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [910, 200],
+      "parameters": {
+        "fieldToSplitOut": "accounts",
+        "options": {}
+      }
+    },
+    {
+      "id": "sync-account",
+      "name": "Sync Calendar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1130, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BEE_API_URL }}/api/internal/sync-calendar/{{ $json.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Internal-Secret",
+              "value": "={{ $env.INTERNAL_API_SECRET }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "check-auth-error",
+      "name": "Auth Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1350, 200],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-reauth",
+              "leftValue": "={{ $json.requiresReauth }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "flag-expired",
+      "name": "Flag Account Expired",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1570, 100],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BEE_API_URL }}/api/internal/calendar-accounts/{{ $json.accountId }}/flag-expired",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Internal-Secret",
+              "value": "={{ $env.INTERNAL_API_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "reason",
+              "value": "={{ $json.error }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "log-results",
+      "name": "Log Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1790, 200],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const results = $input.all();\nlet succeeded = 0;\nlet failed = 0;\nconst errors = [];\n\nfor (const item of results) {\n  if (item.json.success) {\n    succeeded++;\n  } else {\n    failed++;\n    errors.push({\n      accountId: item.json.accountId || 'unknown',\n      error: item.json.error || 'Unknown error'\n    });\n  }\n}\n\nconsole.log(`Calendar sync completed: ${succeeded} succeeded, ${failed} failed`);\n\nreturn [{\n  json: {\n    succeeded,\n    failed,\n    errors,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      }
+    },
+    {
+      "id": "no-accounts",
+      "name": "No Accounts",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [910, 400],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Every 15 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Get Calendar Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Calendar Accounts": {
+      "main": [
+        [
+          {
+            "node": "Has Accounts?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Accounts?": {
+      "main": [
+        [
+          {
+            "node": "Extract Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Accounts": {
+      "main": [
+        [
+          {
+            "node": "Sync Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Calendar": {
+      "main": [
+        [
+          {
+            "node": "Auth Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth Error?": {
+      "main": [
+        [
+          {
+            "node": "Flag Account Expired",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flag Account Expired": {
+      "main": [
+        [
+          {
+            "node": "Log Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC"
+  },
+  "meta": {
+    "description": "Syncs calendar events from all enabled calendar accounts every 15 minutes. Handles token expiration and consecutive failures automatically."
+  }
+}

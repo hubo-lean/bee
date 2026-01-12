@@ -1,9 +1,10 @@
-import { prisma } from "@packages/db";
+import { prisma, type InboxItem } from "@packages/db";
 
 const DEFAULT_CONFIDENCE_THRESHOLD = 0.6;
 
 /**
  * Get items that need review (low confidence AI classification)
+ * Uses raw SQL to filter JSON fields in the database instead of JavaScript
  */
 export async function getNeedsReviewQueue(userId: string) {
   // Get user's confidence threshold setting
@@ -15,40 +16,39 @@ export async function getNeedsReviewQueue(userId: string) {
   const settings = user?.settings as { confidenceThreshold?: number } | null;
   const threshold = settings?.confidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD;
 
-  // Find pending items with low confidence
-  const items = await prisma.inboxItem.findMany({
-    where: {
-      userId,
-      status: "pending",
-    },
-    orderBy: { createdAt: "asc" },
-  });
+  // Filter in database using raw SQL for JSON operations
+  const items = await prisma.$queryRaw<InboxItem[]>`
+    SELECT * FROM "InboxItem"
+    WHERE "userId" = ${userId}
+      AND status = 'pending'
+      AND (
+        "aiClassification" IS NULL
+        OR ("aiClassification"->>'confidence')::float < ${threshold}
+      )
+    ORDER BY "createdAt" ASC
+    LIMIT 100
+  `;
 
-  // Filter by confidence threshold (JSON field)
-  return items.filter((item) => {
-    const classification = item.aiClassification as { confidence?: number } | null;
-    if (!classification) return true; // No classification = needs review
-    return (classification.confidence ?? 0) < threshold;
-  });
+  return items;
 }
 
 /**
  * Get items user disagreed with during daily triage (deferred to weekly review)
+ * Uses raw SQL to filter JSON fields in the database instead of JavaScript
  */
 export async function getDisagreementsQueue(userId: string) {
-  const items = await prisma.inboxItem.findMany({
-    where: {
-      userId,
-      status: "pending",
-    },
-    orderBy: { createdAt: "asc" },
-  });
+  // Filter in database using raw SQL for JSON operations
+  const items = await prisma.$queryRaw<InboxItem[]>`
+    SELECT * FROM "InboxItem"
+    WHERE "userId" = ${userId}
+      AND status = 'pending'
+      AND "userFeedback" IS NOT NULL
+      AND ("userFeedback"->>'deferredToWeekly')::boolean = true
+    ORDER BY "createdAt" ASC
+    LIMIT 100
+  `;
 
-  // Filter to items with deferredToWeekly flag
-  return items.filter((item) => {
-    const feedback = item.userFeedback as { deferredToWeekly?: boolean } | null;
-    return feedback?.deferredToWeekly === true;
-  });
+  return items;
 }
 
 /**

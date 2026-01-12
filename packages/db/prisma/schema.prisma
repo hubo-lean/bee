@@ -124,6 +124,7 @@ model InboxItem {
   @@index([userId, status])
   @@index([userId, createdAt])
   @@index([userId, autoArchiveDate])
+  @@index([userId, status, createdAt]) // Performance: composite for common queries
 }
 
 model ClassificationAudit {
@@ -422,6 +423,11 @@ model CalendarAccount {
   syncStatus    String    @default("idle")
   lastSyncAt    DateTime?
   lastSyncError String?
+
+  // n8n sync workflow fields
+  syncEnabled         Boolean @default(true)  // Enable/disable automatic sync
+  tokenExpired        Boolean @default(false) // Flag for expired OAuth tokens
+  consecutiveFailures Int     @default(0)     // Track consecutive sync failures
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

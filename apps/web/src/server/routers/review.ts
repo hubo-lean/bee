@@ -37,9 +37,10 @@ export const reviewRouter = router({
       where: { id: { in: session.itemIds } },
     });
 
-    // Maintain original order
+    // Maintain original order using O(1) Map lookup instead of O(n) find
+    const itemMap = new Map(items.map((i) => [i.id, i]));
     const orderedItems = session.itemIds
-      .map((id: string) => items.find((i) => i.id === id))
+      .map((id: string) => itemMap.get(id))
       .filter((item): item is NonNullable<typeof item> => item !== undefined);
 
     return {
@@ -70,9 +71,10 @@ export const reviewRouter = router({
         where: { id: { in: session.itemIds } },
       });
 
-      // Maintain original order
+      // Maintain original order using O(1) Map lookup instead of O(n) find
+      const itemMap = new Map(items.map((i) => [i.id, i]));
       const orderedItems = session.itemIds
-        .map((id: string) => items.find((i) => i.id === id))
+        .map((id: string) => itemMap.get(id))
         .filter((item): item is NonNullable<typeof item> => item !== undefined);
 
       return {

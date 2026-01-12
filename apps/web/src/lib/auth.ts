@@ -40,11 +40,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
     // Optional Google OAuth - only enabled if env vars are set
+    // Story 7.3: Includes Gmail readonly scope for email sync
     ...(process.env.GOOGLE_CLIENT_ID
       ? [
           Google({
             clientId: process.env.GOOGLE_CLIENT_ID,
             clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+            authorization: {
+              params: {
+                scope: [
+                  "openid",
+                  "email",
+                  "profile",
+                  "https://www.googleapis.com/auth/gmail.readonly",
+                ].join(" "),
+                access_type: "offline",
+                prompt: "consent",
+              },
+            },
           }),
         ]
       : []),

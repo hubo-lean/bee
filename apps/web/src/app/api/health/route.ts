@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@packages/db";
 import { n8nService } from "@/lib/services/n8n";
 import { libreChatService } from "@/lib/services/librechat";
+import { AIClassificationService } from "@/server/services/ai-classification.service";
 
 interface ServiceStatus {
   status: "connected" | "disconnected" | "not_configured";
@@ -62,30 +63,55 @@ async function checkLibreChat(): Promise<ServiceStatus> {
   };
 }
 
+// Story 7.2: Check OpenAI for AI classification
+async function checkOpenAI(): Promise<ServiceStatus> {
+  if (!AIClassificationService.isConfigured()) {
+    return {
+      status: "not_configured",
+      lastChecked: new Date().toISOString(),
+    };
+  }
+
+  const result = await AIClassificationService.testConnection();
+  return {
+    status: result.success ? "connected" : "disconnected",
+    latency: result.latency,
+    error: result.error,
+    lastChecked: new Date().toISOString(),
+  };
+}
+
 export async function GET() {
-  const [database, n8n, librechat] = await Promise.all([
+  const [database, n8n, librechat, openai] = await Promise.all([
     checkDatabase(),
     checkN8n(),
     checkLibreChat(),
+    checkOpenAI(),
   ]);
 
-  const services = { database, n8n, librechat };
+  // Story 7.2: OpenAI is now required for classification (replaces n8n for this)
+  // n8n is optional and only used for complex workflows
+  const services = { database, n8n, librechat, openai };
 
-  // Determine overall status
-  const statuses = Object.values(services).map((s) => s.status);
-  const configuredServices = statuses.filter((s) => s !== "not_configured");
+  // Core services: database and OpenAI are required
+  // Optional services: n8n, librechat
+  const coreHealthy =
+    database.status === "connected" &&
+    (openai.status === "connected" || openai.status === "not_configured");
+
+  // Check optional services
+  const optionalServices = [n8n, librechat];
+  const configuredOptional = optionalServices.filter((s) => s.status !== "not_configured");
+  const optionalHealthy = configuredOptional.every((s) => s.status === "connected");
 
   let overallStatus: "healthy" | "degraded" | "unhealthy";
 
-  if (configuredServices.length === 0) {
-    // Only database is configured, and everything else is optional
-    overallStatus = database.status === "connected" ? "healthy" : "unhealthy";
-  } else if (configuredServices.every((s) => s === "connected")) {
-    overallStatus = "healthy";
-  } else if (configuredServices.some((s) => s === "connected")) {
-    overallStatus = "degraded";
-  } else {
+  if (!coreHealthy) {
     overallStatus = "unhealthy";
+  } else if (configuredOptional.length === 0 || optionalHealthy) {
+    overallStatus = "healthy";
+  } else {
+    overallStatus = "degraded";
   }
 
   const responseBody = {

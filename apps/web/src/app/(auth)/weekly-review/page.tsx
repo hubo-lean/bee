@@ -1,15 +1,12 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { format } from "date-fns";
 import { Calendar, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProgressSidebar } from "@/components/weekly-review/progress-sidebar";
-import { ObjectivesStep } from "@/components/weekly-review/objectives-step";
-import { PrioritiesStep } from "@/components/weekly-review/priorities-step";
-import { ActionsStep } from "@/components/weekly-review/actions-step";
-import { InboxStep } from "@/components/weekly-review/inbox-step";
 import { trpc } from "@/lib/trpc";
 import {
   getCurrentWeekStart,
@@ -20,13 +17,68 @@ import {
   type InboxStepData,
 } from "@/server/services/weekly-review.service";
 
+// Lazy load step components for code splitting
+function StepSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <Skeleton className="h-7 w-48 mb-2" />
+        <Skeleton className="h-5 w-80" />
+      </div>
+      <div className="space-y-3">
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-24 w-full rounded-lg" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const ObjectivesStep = dynamic(
+  () =>
+    import("@/components/weekly-review/objectives-step").then(
+      (m) => m.ObjectivesStep
+    ),
+  { loading: () => <StepSkeleton /> }
+);
+
+const PrioritiesStep = dynamic(
+  () =>
+    import("@/components/weekly-review/priorities-step").then(
+      (m) => m.PrioritiesStep
+    ),
+  { loading: () => <StepSkeleton /> }
+);
+
+const ActionsStep = dynamic(
+  () =>
+    import("@/components/weekly-review/actions-step").then(
+      (m) => m.ActionsStep
+    ),
+  { loading: () => <StepSkeleton /> }
+);
+
+const InboxStep = dynamic(
+  () =>
+    import("@/components/weekly-review/inbox-step").then((m) => m.InboxStep),
+  { loading: () => <StepSkeleton /> }
+);
+
 export default function WeeklyReviewPage() {
-  const { data: session, isLoading, refetch } = trpc.weeklyReview.getSession.useQuery();
+  const utils = trpc.useUtils();
+  const { data: session, isLoading } = trpc.weeklyReview.getSession.useQuery();
   const startSession = trpc.weeklyReview.startSession.useMutation({
-    onSuccess: () => refetch(),
+    onSuccess: () => {
+      utils.weeklyReview.getSession.invalidate();
+    },
+    onError: (error) => {
+      console.error("Failed to start weekly review session:", error);
+    },
   });
   const completeStep = trpc.weeklyReview.completeStep.useMutation({
-    onSuccess: () => refetch(),
+    onSuccess: () => {
+      utils.weeklyReview.getSession.invalidate();
+    },
   });
 
   const handleCompleteObjectives = (data: ObjectivesStepData) => {

@@ -1,6 +1,13 @@
 import { prisma, SearchSourceType, Prisma } from "@packages/db";
 import { generateEmbedding, formatEmbeddingForPgVector } from "./embedding.service";
 
+// Search configuration
+const SEARCH_CONFIG = {
+  SIMILARITY_THRESHOLD: 0.3, // Filter out results below this similarity score
+  DEFAULT_LIMIT: 20,
+  MAX_LIMIT: 100,
+};
+
 export interface SearchFilters {
   types?: SearchSourceType[];
   projectId?: string;
@@ -22,6 +29,22 @@ export interface SearchResult {
   areaId: string | null;
   tags: string[];
   createdAt: Date;
+  // Hydrated item data (optional)
+  item?: HydratedItem;
+}
+
+export interface HydratedItem {
+  id: string;
+  content: string;
+  status?: string;
+  category?: string;
+  confidence?: number;
+}
+
+export interface SemanticSearchResponse {
+  results: SearchResult[];
+  total: number;
+  latencyMs: number;
 }
 
 interface RawSearchResult {
@@ -41,14 +64,20 @@ export async function semanticSearch(
   userId: string,
   query: string,
   filters: SearchFilters = {},
-  limit: number = 20
-): Promise<SearchResult[]> {
+  limit: number = SEARCH_CONFIG.DEFAULT_LIMIT,
+  options: { hydrate?: boolean } = {}
+): Promise<SemanticSearchResponse> {
+  const startTime = Date.now();
+
   // Generate query embedding
   const queryEmbedding = await generateEmbedding(query);
   const queryVector = formatEmbeddingForPgVector(queryEmbedding);
 
   // Build filter conditions
-  const conditions: Prisma.Sql[] = [Prisma.sql`"userId" = ${userId}`];
+  const conditions: Prisma.Sql[] = [
+    Prisma.sql`"userId" = ${userId}`,
+    Prisma.sql`"embedding" IS NOT NULL`,
+  ];
 
   if (filters.types && filters.types.length > 0) {
     const typesArray = filters.types.map((t) => `'${t}'`).join(",");
@@ -76,8 +105,9 @@ export async function semanticSearch(
   }
 
   const whereClause = Prisma.join(conditions, " AND ");
+  const threshold = SEARCH_CONFIG.SIMILARITY_THRESHOLD;
 
-  // Perform vector similarity search
+  // Perform vector similarity search with threshold filtering
   const results = await prisma.$queryRaw<RawSearchResult[]>`
     SELECT
       "id",
@@ -92,15 +122,59 @@ export async function semanticSearch(
       1 - ("embedding" <=> ${queryVector}::vector) as similarity
     FROM "SearchIndex"
     WHERE ${whereClause}
+      AND 1 - ("embedding" <=> ${queryVector}::vector) > ${threshold}
     ORDER BY "embedding" <=> ${queryVector}::vector
-    LIMIT ${limit}
+    LIMIT ${Math.min(limit, SEARCH_CONFIG.MAX_LIMIT)}
   `;
 
-  // Generate snippets and return results
-  return results.map((result) => ({
+  // Hydrate results with full item data if requested
+  let hydratedItems: Map<string, HydratedItem> = new Map();
+  if (options.hydrate) {
+    const inboxItemIds = results
+      .filter((r) => r.sourceType === "INBOX_ITEM")
+      .map((r) => r.sourceId);
+
+    if (inboxItemIds.length > 0) {
+      const items = await prisma.inboxItem.findMany({
+        where: { id: { in: inboxItemIds } },
+        select: {
+          id: true,
+          content: true,
+          status: true,
+          aiClassification: true,
+        },
+      });
+
+      for (const item of items) {
+        const classification = item.aiClassification as {
+          category?: string;
+          confidence?: number;
+        } | null;
+        hydratedItems.set(item.id, {
+          id: item.id,
+          content: item.content,
+          status: item.status,
+          category: classification?.category,
+          confidence: classification?.confidence,
+        });
+      }
+    }
+  }
+
+  const latencyMs = Date.now() - startTime;
+
+  // Generate snippets and return results with hydrated data
+  const searchResults: SearchResult[] = results.map((result) => ({
     ...result,
     snippet: generateSnippet(result.content, query),
+    item: hydratedItems.get(result.sourceId),
   }));
+
+  return {
+    results: searchResults,
+    total: results.length,
+    latencyMs,
+  };
 }
 
 function generateSnippet(content: string, query: string, maxLength: number = 200): string {

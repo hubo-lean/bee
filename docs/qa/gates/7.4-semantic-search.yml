@@ -1,0 +1,55 @@
+schema: 1
+story: "7.4"
+story_title: "Search Index Population & Semantic Search"
+gate: PASS
+status_reason: "Semantic search fully implemented with pgvector, similarity threshold filtering, result hydration, and batch reindex capability."
+reviewer: "Quinn (Test Architect)"
+updated: "2026-01-12T14:30:00Z"
+
+waiver: { active: false }
+
+top_issues: []
+
+risk_summary:
+  totals: { critical: 0, high: 0, medium: 0, low: 0 }
+  recommendations:
+    must_fix: []
+    monitor: []
+
+evidence:
+  tests_reviewed: 143
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7, 8]
+    ac_gaps: []
+
+nfr_validation:
+  security: { status: PASS, notes: "Internal API protected with secret header authentication" }
+  performance: { status: PASS, notes: "HNSW index for fast ANN search, latency tracking in response" }
+  reliability: { status: PASS, notes: "Text search fallback when embedding fails" }
+  maintainability: { status: PASS, notes: "Clean separation between search service and index service" }
+
+analysis:
+  strengths:
+    - "Embedding generation hooked into classification (async, non-blocking)"
+    - "pgvector cosine similarity with threshold filtering (0.3)"
+    - "Latency tracking returned in search response"
+    - "Optional result hydration with full item data"
+    - "Filter support: types, projectId, areaId, tags, date range"
+    - "Smart snippet generation with query word highlighting"
+    - "Batch reindex endpoint at /api/internal/reindex"
+    - "Text search fallback for when embedding generation fails"
+
+  verification:
+    - "search.service.ts: semanticSearch with threshold at line 108"
+    - "Cosine similarity calculation at line 122"
+    - "Hydration logic at lines 131-162"
+    - "ai-classification.service.ts: indexContentAsync called at line 278"
+    - "Reindex endpoint with INTERNAL_API_SECRET protection"
+    - "143 tests passing per story documentation"
+
+recommendations:
+  immediate: []
+  future:
+    - action: "Add search analytics to track query patterns and improve relevance"
+      refs: ["apps/web/src/server/services/search.service.ts"]
