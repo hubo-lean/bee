@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=ltugyvocpmdjlnzfjbat"
+    },
+    "n8n-mcp": {
+      "command": "npx",
+      "args": ["n8n-mcp"],
+      "env": {
+        "MCP_MODE": "stdio",
+        "LOG_LEVEL": "error",
+        "DISABLE_CONSOLE_OUTPUT": "true",
+        "N8N_API_URL": "http://72.60.131.162:5678/mcp-server/http",
+        "N8N_API_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2OWNlZmJjYS0wZjUxLTQ4YmUtYjFlYi02NmM3NGVkOTA3MmYiLCJpc3MiOiJuOG4iLCJhdWQiOiJtY3Atc2VydmVyLWFwaSIsImp0aSI6IjZhYWU0MTVkLWE5N2UtNDU2MC04ZjlmLWViYjk4OWZmZjJjNCIsImlhdCI6MTc2ODE0OTkzMn0.XDsRvrWKd6GFxjnTLWnXf_gVn7flvMVgThMhCFkkyGA"
+      }
+    }
+  }
+}

@@ -140,7 +140,7 @@ export const userRouter = router({
     .input(
       z.object({
         confidenceThreshold: z.number().min(0).max(1).optional(),
-        autoArchiveDays: z.number().min(1).max(365).optional(),
+        autoArchiveDays: z.number().min(0).max(365).optional(), // 0 = disabled
         defaultModel: z.string().optional(),
         weeklyReviewDay: z.number().min(0).max(6).optional(),
       })

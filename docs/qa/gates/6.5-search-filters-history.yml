@@ -1,0 +1,125 @@
+# QA Gate - Story 6.5: Search Filters & History
+# Generated: 2026-01-12
+# Reviewer: Quinn (Test Architect)
+
+schema: 1
+story: "6.5"
+gate: PASS
+status_reason: "No HIGH severity issues. Schema models exist. MEDIUM issues are minor and can be addressed during development."
+reviewer: "Quinn"
+updated: "2026-01-12T14:00:00Z"
+
+top_issues:
+  - id: "REQ-001"
+    severity: medium
+    finding: "Story references trpc.tags.getAll but no tags router shown in story"
+    suggested_action: "Either create tags router or use tags from searchable content metadata"
+
+  - id: "MNT-001"
+    severity: medium
+    finding: "saveSearchHistory uses subHours from date-fns but import not shown in code"
+    suggested_action: "Ensure date-fns subHours is imported in search-history.service.ts"
+
+  - id: "REQ-002"
+    severity: medium
+    finding: "Story depends on Story 5.3 (PARA Structure) - verify areas/projects exist"
+    suggested_action: "Confirm Project and Area models exist (they do - schema lines 206-252)"
+
+  - id: "MNT-002"
+    severity: low
+    finding: "formatRelative in RecentSearches may produce inconsistent results across locales"
+    suggested_action: "Consider formatDistanceToNow for consistent 'X minutes ago' format"
+
+  - id: "MNT-003"
+    severity: low
+    finding: "SelectItem with value='' for 'All projects/areas' may cause issues with some Select implementations"
+    suggested_action: "Use value='__all__' or similar non-empty placeholder"
+
+  - id: "MNT-004"
+    severity: low
+    finding: "Tags filter shows all tags - could be overwhelming with many tags"
+    suggested_action: "Add search/filter within tags section or limit to top N used tags"
+
+waiver:
+  active: false
+
+# Schema Validation
+schema_alignment:
+  SearchHistory:
+    model: "EXISTS - lines 569-580"
+    fields:
+      - "id: String @id @default(cuid())"
+      - "userId: String with relation"
+      - "query: String"
+      - "filters: Json?"
+      - "searchedAt: DateTime @default(now())"
+    indexes: "@@index([userId, searchedAt(sort: Desc)])"
+  SavedSearch:
+    model: "EXISTS - lines 582-595"
+    fields:
+      - "id: String @id @default(cuid())"
+      - "userId: String with relation"
+      - "name: String"
+      - "query: String"
+      - "filters: Json?"
+      - "createdAt/updatedAt: DateTime"
+    indexes: "@@index([userId])"
+  notes: "All required schema models exist and are correctly structured"
+
+# Acceptance Criteria Coverage
+acceptance_criteria:
+  AC1: { status: "COVERED", notes: "Checkbox filters for each SearchSourceType" }
+  AC2: { status: "COVERED", notes: "Select dropdowns for project and area filtering" }
+  AC3: { status: "COVERED", notes: "Date pickers with quick presets (7, 30, 90 days)" }
+  AC4: { status: "COVERED", notes: "Badge-based tag selection UI" }
+  AC5: { status: "COVERED", notes: "SearchHistory model and RecentSearches component" }
+  AC6: { status: "COVERED", notes: "clearHistory mutation with Clear button" }
+  AC7: { status: "COVERED", notes: "SavedSearch model and SaveSearchDialog component" }
+
+# NFR Validation
+nfr_validation:
+  usability:
+    status: "PASS"
+    notes: "Good UX with filter sidebar, active filters display, quick date presets"
+  performance:
+    status: "PASS"
+    notes: "Indexed queries on userId and searchedAt; MAX_HISTORY_ITEMS pruning"
+  data_integrity:
+    status: "PASS"
+    notes: "History deduplication within 1 hour; bounded history size"
+
+# Test Design Gaps
+test_design:
+  coverage_gaps:
+    - "Unit tests for filter combination logic (AND behavior)"
+    - "Unit tests for search history deduplication (1 hour window)"
+    - "Unit tests for history pruning at MAX_HISTORY_ITEMS (50)"
+    - "Integration test for saved search create/delete flow"
+    - "E2E test for filter persistence across page navigation"
+
+# Dependencies
+dependencies:
+  - name: "Story 6.4 (Semantic Search)"
+    status: "REQUIRED"
+    notes: "Core search functionality must exist first"
+  - name: "Project model"
+    status: "EXISTS"
+    notes: "Lines 206-230 in schema"
+  - name: "Area model"
+    status: "EXISTS"
+    notes: "Lines 232-252 in schema"
+  - name: "Tags service"
+    status: "UNVERIFIED"
+    notes: "trpc.tags.getAll referenced but router not in story"
+
+# Recommendations
+recommendations:
+  must_fix: []
+  should_fix:
+    - "Add tags router or clarify tag retrieval method"
+    - "Add missing date-fns imports in service files"
+    - "Use non-empty placeholder values for Select 'All' options"
+  nice_to_have:
+    - "Add tag search/filtering for large tag sets"
+    - "Use formatDistanceToNow for consistent relative times"
+    - "Add E2E tests for filter workflows"

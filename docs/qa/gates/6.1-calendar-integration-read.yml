@@ -1,0 +1,105 @@
+# QA Gate - Story 6.1: Calendar Integration (Read)
+# Generated: 2026-01-12
+# Re-reviewed: 2026-01-12
+# Reviewer: Quinn (Test Architect)
+
+schema: 1
+story: "6.1"
+gate: PASS
+status_reason: "All HIGH severity blocking issues resolved. Encryption utilities documented with AES-256-GCM, OAuth refresh token expiration handled with CalendarAuthError, custom error classes defined."
+reviewer: "Quinn"
+updated: "2026-01-12T15:30:00Z"
+
+# RESOLVED Issues from Previous Review
+resolved_issues:
+  - id: "SEC-001"
+    severity: "was HIGH"
+    finding: "CalDAV password encryption implementation not detailed"
+    resolution: "FIXED - Encryption Utilities section added (lines 81-132) with full AES-256-GCM implementation using scryptSync key derivation"
+
+  - id: "SEC-002"
+    severity: "was HIGH"
+    finding: "OAuth refresh token expiration handling incomplete"
+    resolution: "FIXED - refreshToken() method handles invalid_grant error (lines 362-367) and throws CalendarAuthError with needsReauth: true"
+
+  - id: "REQ-001"
+    severity: "was MEDIUM"
+    finding: "Technical design lacks explicit error recovery patterns"
+    resolution: "FIXED - Custom Error Classes section added (lines 208-231) with CalendarConnectionError and CalendarAuthError"
+
+  - id: "PERF-001"
+    severity: "was MEDIUM"
+    finding: "Microsoft Graph API rate limiting handling missing"
+    resolution: "FIXED - Rate limiting (429) handling added in fetchEvents (lines 297-305) with retry-after header support"
+
+# Remaining Issues
+top_issues:
+  - id: "MNT-001"
+    severity: medium
+    finding: "tsdav library API may have changed since story creation - createDAVClient import syntax unverified"
+    suggested_action: "Verify current tsdav package API before implementation; update imports if needed"
+    notes: "Implementation should verify API during development"
+
+  - id: "MNT-002"
+    severity: low
+    finding: "Timezone handling in CalDAV parsing may lose TZ info during toJSDate() conversion"
+    suggested_action: "Use timezone property from event for proper TZ normalization"
+    notes: "Minor - timezone field exists in schema for reference"
+
+  - id: "TEST-001"
+    severity: low
+    finding: "Testing checklist lacks unit test specifications for provider clients"
+    suggested_action: "Add unit tests with mocked tsdav/Graph clients to testing checklist"
+    notes: "Testing checklist includes general provider tests"
+
+waiver:
+  active: false
+
+# Schema Validation
+schema_alignment:
+  CalendarAccount: "EXISTS - schema lines 403-432"
+  CalendarEvent: "EXISTS - schema lines 434-466"
+  encryption: "DOCUMENTED - Encryption Utilities section (lines 81-132)"
+  error_classes: "DOCUMENTED - Custom Error Classes section (lines 208-231)"
+  notes: "Schema correctly supports both CalDAV and OAuth providers with encrypted credential storage"
+
+# Acceptance Criteria Coverage
+acceptance_criteria:
+  AC1: { status: "COVERED", notes: "CalDAV and MS Graph providers implemented with error handling" }
+  AC2: { status: "COVERED", notes: "WeekView and DayView components specified" }
+  AC3: { status: "COVERED", notes: "EventDetailSheet displays all required fields" }
+  AC4: { status: "COVERED", notes: "Both provider clients with authentication in technical design" }
+  AC5: { status: "COVERED", notes: "syncCalendar mutation with UI refresh button" }
+  AC6: { status: "COVERED", notes: "Calendar page in Files to Create/Modify table" }
+  AC7: { status: "COVERED", notes: "CalendarConnectionError and CalendarAuthError classes handle provider unavailability and invalid credentials" }
+
+# NFR Validation
+nfr_validation:
+  security:
+    status: "PASS"
+    notes: "AES-256-GCM encryption with scryptSync key derivation documented; credentials encrypted at rest"
+  performance:
+    status: "PASS"
+    notes: "Local caching via upsertEvents; indexed queries on userId/startTime; rate limiting handled"
+  reliability:
+    status: "PASS"
+    notes: "Custom error classes enable graceful degradation; CalendarAuthError triggers re-authentication flow"
+
+# Test Design Gaps
+test_design:
+  coverage_gaps:
+    - "Unit tests for CalDAVCalendarClient with mocked tsdav"
+    - "Unit tests for MicrosoftCalendarClient with mocked Graph client"
+    - "Integration test for OAuth token refresh flow including invalid_grant scenario"
+    - "Error scenario tests for CalendarConnectionError and CalendarAuthError"
+
+# Recommendations
+recommendations:
+  must_fix: []
+  should_fix:
+    - "Verify tsdav current API version during implementation"
+    - "Add timezone normalization in CalDAV parsing"
+    - "Add comprehensive provider client unit tests"
+  nice_to_have:
+    - "Add retry with exponential backoff for transient errors"
+    - "Consider webhook-based sync for real-time updates"

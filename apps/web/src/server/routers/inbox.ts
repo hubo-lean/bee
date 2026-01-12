@@ -3,6 +3,13 @@ import { router, protectedProcedure } from "../trpc";
 import { prisma } from "@packages/db";
 import { n8nService } from "@/lib/services/n8n";
 import { classificationService, type ProcessingMeta } from "../services/classification.service";
+import {
+  getAutoArchiveWarnings,
+  getPendingCount,
+  declareBankruptcy,
+  getArchivedItems,
+  restoreFromArchive,
+} from "../services/auto-archive.service";
 
 const inboxItemTypeSchema = z.enum([
   "manual",
@@ -337,6 +344,68 @@ export const inboxRouter = router({
             failedAt: processingMeta.failedAt,
           },
         };
+      });
+    }),
+
+  // Story 5.5: Auto-Archive & Bankruptcy
+
+  /**
+   * Get items with auto-archive warnings
+   */
+  getAutoArchiveWarnings: protectedProcedure.query(async ({ ctx }) => {
+    return getAutoArchiveWarnings(ctx.userId);
+  }),
+
+  /**
+   * Get pending item count
+   */
+  getPendingCount: protectedProcedure.query(async ({ ctx }) => {
+    return getPendingCount(ctx.userId);
+  }),
+
+  /**
+   * Declare inbox bankruptcy
+   */
+  declareBankruptcy: protectedProcedure.mutation(async ({ ctx }) => {
+    return declareBankruptcy(ctx.userId);
+  }),
+
+  /**
+   * Get archived items with filtering
+   */
+  getArchived: protectedProcedure
+    .input(
+      z.object({
+        filter: z.enum(["all", "unprocessed", "bankruptcy"]).default("all"),
+        limit: z.number().min(1).max(100).default(50),
+        cursor: z.string().optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      return getArchivedItems(ctx.userId, input);
+    }),
+
+  /**
+   * Restore item from archive
+   */
+  restore: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      return restoreFromArchive(ctx.userId, input.id);
+    }),
+
+  /**
+   * Archive a single item
+   */
+  archive: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      return prisma.inboxItem.update({
+        where: { id: input.id, userId: ctx.userId },
+        data: {
+          status: "archived",
+          archivedAt: new Date(),
+        },
       });
     }),
 });

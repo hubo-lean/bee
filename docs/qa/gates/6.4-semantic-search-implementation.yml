@@ -1,0 +1,125 @@
+# QA Gate - Story 6.4: Semantic Search Implementation
+# Generated: 2026-01-12
+# Re-reviewed: 2026-01-12
+# Reviewer: Quinn (Test Architect)
+
+schema: 1
+story: "6.4"
+gate: PASS
+status_reason: "All HIGH severity blocking issues resolved. Schema has embedding column, HNSW index documented, and action.description used correctly."
+reviewer: "Quinn"
+updated: "2026-01-12T15:00:00Z"
+
+# RESOLVED Issues from Previous Review
+resolved_issues:
+  - id: "ARCH-001"
+    severity: "was HIGH"
+    finding: "SearchIndex embedding column was commented out in schema"
+    resolution: "FIXED - Schema line 553 now has: embedding Unsupported(\"vector(1536)\")?"
+
+  - id: "PERF-001"
+    severity: "was HIGH"
+    finding: "No vector index existed for performance NFR"
+    resolution: "FIXED - Story documents HNSW index creation (lines 84-95) with migration file reference (line 44-45)"
+
+  - id: "REQ-001"
+    severity: "was HIGH"
+    finding: "Story referenced action.title but Action model has description"
+    resolution: "FIXED - Story now uses action.description (lines 261, 271-272)"
+
+  - id: "MNT-003"
+    severity: "was LOW"
+    finding: "MessageSquare icon used but not imported"
+    resolution: "FIXED - Import shown on line 462 with other lucide-react icons"
+
+# Remaining Issues
+top_issues:
+  - id: "MNT-001"
+    severity: medium
+    finding: "Prisma.$executeRaw with template literal for embedding insert - Prisma pgvector compatibility varies"
+    suggested_action: "Test raw query functionality; consider prisma-extension-pgvector if issues arise"
+    notes: "Implementation should work with raw SQL; test during development"
+
+  - id: "PERF-002"
+    severity: medium
+    finding: "reindexUserContent iterates items one-by-one - expensive for large datasets"
+    suggested_action: "Use batch embedding generation and bulk upserts for efficiency"
+    notes: "Batch generation function exists (lines 121-142); should use for bulk reindex"
+
+  - id: "PERF-003"
+    severity: medium
+    finding: "No rate limiting for OpenAI API embedding calls documented"
+    suggested_action: "Add rate limiting for batch reindexing; document cost estimates"
+    notes: "Should add rate limiting during implementation for production safety"
+
+  - id: "MNT-002"
+    severity: low
+    finding: "Plus icon used in SearchCommandBar (line 593) but import not explicitly shown"
+    suggested_action: "Add import: import { Plus } from 'lucide-react'"
+    notes: "Minor - will be caught by TypeScript during implementation"
+
+waiver:
+  active: false
+
+# Schema Validation
+schema_alignment:
+  SearchIndex:
+    model: "EXISTS - schema lines 540-566"
+    embedding_column: "ACTIVE - schema line 553: embedding Unsupported(\"vector(1536)\")?"
+    sourceType_enum: "EXISTS - schema lines 532-538"
+  migration:
+    file: "packages/db/prisma/migrations/20260112_add_search_index_with_embedding.sql"
+    hnsw_index: "Documented in story (lines 84-95)"
+  notes: "Schema and migration fully support semantic search with vector similarity"
+
+# Acceptance Criteria Coverage
+acceptance_criteria:
+  AC1: { status: "COVERED", notes: "SearchCommandBar with Cmd+K (lines 491-502)" }
+  AC2: { status: "COVERED", notes: "Embedding column active; cosine similarity search (line 380)" }
+  AC3: { status: "COVERED", notes: "generateSnippet function with sliding window (lines 400-442)" }
+  AC4: { status: "COVERED", notes: "SearchSourceType enum covers all types" }
+  AC5: { status: "COVERED", notes: "HNSW index ensures O(log n) search performance" }
+  AC6: { status: "COVERED", notes: "Async indexing on content create/update (lines 706-764)" }
+
+# NFR Validation
+nfr_validation:
+  NFR2_performance:
+    status: "PASS"
+    requirement: "Search latency < 1 second"
+    notes: "HNSW index provides O(log n) search; documented in story"
+  security:
+    status: "PASS"
+    notes: "userId filtering on all queries ensures data isolation"
+  cost_management:
+    status: "CONCERNS"
+    notes: "Rate limiting for OpenAI API should be added during implementation"
+
+# Test Design Gaps
+test_design:
+  coverage_gaps:
+    - "Unit tests for generateEmbedding with mocked OpenAI"
+    - "Unit tests for semanticSearch with mocked database"
+    - "Integration test for full search flow"
+    - "Performance test for search latency with 10K+ items"
+    - "Test for 30-second indexing requirement (AC6)"
+
+# Dependencies
+dependencies:
+  - name: "pgvector extension"
+    status: "REQUIRED"
+    notes: "Migration enables extension: CREATE EXTENSION IF NOT EXISTS vector"
+  - name: "OpenAI API"
+    status: "REQUIRED"
+    notes: "OPENAI_API_KEY env var needed; openai package to be added"
+
+# Recommendations
+recommendations:
+  must_fix: []
+  should_fix:
+    - "Add rate limiting for OpenAI API during batch reindexing"
+    - "Use batch operations for reindexUserContent"
+    - "Document cost estimates for embedding generation"
+    - "Add Plus icon import to SearchCommandBar"
+  nice_to_have:
+    - "Consider caching for frequent queries"
+    - "Add monitoring for embedding generation costs"

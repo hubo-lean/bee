@@ -17,6 +17,7 @@
 **Total Ideas Generated:** 20+ design decisions across 4 zones
 
 ### Key Themes Identified:
+
 - Capture isn't the friction - **retrieval is** (the graveyard problem)
 - AI should absorb complexity, not the user
 - The system must earn trust progressively
@@ -41,19 +42,21 @@
 
 **Capture Flow Design:**
 
-| Input Type | Mechanism | Friction Level |
-|------------|-----------|----------------|
-| Photos/Whiteboard | In-app camera → direct to inbox | 🟢 Low (1 tap) |
-| Screenshots | In-app or share sheet → inbox | 🟢 Low (1-2 taps) |
-| Email | Connector pulls all mail automatically | 🟢 Zero (automatic) |
-| Teams messages | Forward to app | 🟡 Medium (requires action) |
-| Shower thoughts | Phone shortcut → speech-to-text → inbox | 🟢 Low (voice) |
+| Input Type        | Mechanism                               | Friction Level              |
+| ----------------- | --------------------------------------- | --------------------------- |
+| Photos/Whiteboard | In-app camera → direct to inbox         | 🟢 Low (1 tap)              |
+| Screenshots       | In-app or share sheet → inbox           | 🟢 Low (1-2 taps)           |
+| Email             | Connector pulls all mail automatically  | 🟢 Zero (automatic)         |
+| Teams messages    | Forward to app                          | 🟡 Medium (requires action) |
+| Shower thoughts   | Phone shortcut → speech-to-text → inbox | 🟢 Low (voice)              |
 
 **Insights Discovered:**
+
 - The value proposition: "Capture anywhere, it all flows to one place, AI organizes it, you just decide yes/no"
 - The "Bouncer" concept (from external research) elegantly solves inbox overwhelm
 
 **Notable Connections:**
+
 - Design principles from external article align with vision: one behavior (capture), design for restart, safe when uncertain, next action as unit
 
 ---
@@ -76,12 +79,12 @@
 
 3. **Daily Swipe Review (Dating App UX):**
 
-| Gesture | Action |
-|---------|--------|
-| Swipe Right | Agree with AI classification |
-| Swipe Left | Disagree → Fix now (voice/chat) or send to weekly |
-| Swipe Up | 🚨 Urgent - this changes priorities |
-| Swipe Down | Hide (never delete) |
+| Gesture     | Action                                            |
+| ----------- | ------------------------------------------------- |
+| Swipe Right | Agree with AI classification                      |
+| Swipe Left  | Disagree → Fix now (voice/chat) or send to weekly |
+| Swipe Up    | 🚨 Urgent - this changes priorities               |
+| Swipe Down  | Hide (never delete)                               |
 
 4. **Swipe Card UX shows full AI reasoning:**
    - Input (what you captured)
@@ -90,6 +93,7 @@
    - Confidence score
 
 **Insights Discovered:**
+
 - Every swipe is feedback data that trains the AI
 - Daily swipe acts as early warning system for urgent items
 - Nothing is ever deleted, only archived or hidden
@@ -104,10 +108,10 @@
 
 1. **Anti-Guilt Mechanisms:**
 
-| Mechanism | Trigger | What Happens |
-|-----------|---------|--------------|
-| Auto-archive | Item unprocessed for 15 days | AI moves to Archive with tag "Unprocessed - [Date]" |
-| Declare Bankruptcy | User-initiated | Bulk archive everything, fresh start |
+| Mechanism          | Trigger                      | What Happens                                        |
+| ------------------ | ---------------------------- | --------------------------------------------------- |
+| Auto-archive       | Item unprocessed for 15 days | AI moves to Archive with tag "Unprocessed - [Date]" |
+| Declare Bankruptcy | User-initiated               | Bulk archive everything, fresh start                |
 
 2. **Top-Down Review (not bottom-up):**
    - Start with objectives, then align work to them
@@ -127,12 +131,12 @@ DAILY ACTIONS
 
 4. **Governance Rhythm:**
 
-| Cadence | Purpose | Duration |
-|---------|---------|----------|
-| Yearly | Set roadmap, big picture vision | 2-3 hours |
-| Monthly | Break down into monthly targets | 45-60 min |
-| Weekly | Align projects/actions to objectives | 30-45 min |
-| Daily | Swipe review + catch urgent | 2-5 min |
+| Cadence | Purpose                              | Duration  |
+| ------- | ------------------------------------ | --------- |
+| Yearly  | Set roadmap, big picture vision      | 2-3 hours |
+| Monthly | Break down into monthly targets      | 45-60 min |
+| Weekly  | Align projects/actions to objectives | 30-45 min |
+| Daily   | Swipe review + catch urgent          | 2-5 min   |
 
 5. **Weekly Review Flow:**
    - Step 1: Glance at this week's pre-set objectives (from monthly)
@@ -143,11 +147,11 @@ DAILY ACTIONS
 
 6. **Three Queues for Weekly Review:**
 
-| Queue | Source | Priority |
-|-------|--------|----------|
-| Needs Review | AI low confidence (<0.6) | Must process |
-| Disagreements | Items swiped left + "Later" | Must process |
-| Receipts | AI high confidence, auto-filed | Optional spot-check |
+| Queue         | Source                         | Priority            |
+| ------------- | ------------------------------ | ------------------- |
+| Needs Review  | AI low confidence (<0.6)       | Must process        |
+| Disagreements | Items swiped left + "Later"    | Must process        |
+| Receipts      | AI high confidence, auto-filed | Optional spot-check |
 
 7. **Action-to-Objective Linking:**
    - Project actions: Automatic (inherited from project)
@@ -157,6 +161,7 @@ DAILY ACTIONS
 8. **Exit Condition:** Inbox Zero in review queues = Review Complete
 
 **Insights Discovered:**
+
 - Weekly review is simpler because hard thinking (objectives) was done in monthly
 - Daily swipes reduce weekly load - no mountain on Sunday
 - Clear finish line removes ambiguity about "did I do enough?"
@@ -206,6 +211,7 @@ EXTERNAL (OneDrive)
    - Path B (from outside): File added to OneDrive → Sync button → AI indexes → Prompt to link to Project/Area
 
 **Insights Discovered:**
+
 - User's brain is currently the search engine for past work - system should replace this
 - App is the command center - all work starts there
 - Clean separation: App owns notes/actions, OneDrive owns files
@@ -220,19 +226,19 @@ The system doesn't just track actions - it **executes** them with your approval.
 
 **Progressive Autonomy Model:**
 
-| Phase | Behavior |
-|-------|----------|
-| Phase 1 (Learning) | AI drafts → You review → You click execute |
-| Phase 2 (Calibrated) | AI drafts → Auto-execute LOW risk → Approval for HIGH risk |
-| Phase 3 (Trusted) | AI drafts → Auto-execute most → Approval only for sensitive |
+| Phase                | Behavior                                                    |
+| -------------------- | ----------------------------------------------------------- |
+| Phase 1 (Learning)   | AI drafts → You review → You click execute                  |
+| Phase 2 (Calibrated) | AI drafts → Auto-execute LOW risk → Approval for HIGH risk  |
+| Phase 3 (Trusted)    | AI drafts → Auto-execute most → Approval only for sensitive |
 
 **Risk Classification:**
 
-| Risk Level | Examples | Approval Needed |
-|------------|----------|-----------------|
-| 🟢 Low | Block focus time on your calendar | Eventually auto |
-| 🟡 Medium | Send internal email, create meeting with colleagues | Approval in early phases |
-| 🔴 High | Send external email, book with clients, modify shared docs | Always approve |
+| Risk Level | Examples                                                   | Approval Needed          |
+| ---------- | ---------------------------------------------------------- | ------------------------ |
+| 🟢 Low     | Block focus time on your calendar                          | Eventually auto          |
+| 🟡 Medium  | Send internal email, create meeting with colleagues        | Approval in early phases |
+| 🔴 High    | Send external email, book with clients, modify shared docs | Always approve           |
 
 ---
 
@@ -242,15 +248,16 @@ The app becomes your **one place to think** - replacing ChatGPT, Claude, Gemini 
 
 **Three Frustrations Solved:**
 
-| Frustration | Solution |
-|-------------|----------|
-| "Where do I go to think?" | One place for capture, organize, AND think |
+| Frustration                 | Solution                                               |
+| --------------------------- | ------------------------------------------------------ |
+| "Where do I go to think?"   | One place for capture, organize, AND think             |
 | "AI conversations are lost" | Chats auto-saved, organized, searchable like any input |
-| "Locked to one provider" | Model-agnostic: switch between GPT, Claude, Gemini |
+| "Locked to one provider"    | Model-agnostic: switch between GPT, Claude, Gemini     |
 
 **Key Advantage:** Your thinking partner has **full context** - every note, meeting, idea you've ever captured.
 
 **Every AI Conversation is a First-Class Object:**
+
 - Auto-saved to inbox
 - AI extracts: key insights, decisions, action candidates
 - Tagged to relevant Projects/Areas
@@ -258,15 +265,15 @@ The app becomes your **one place to think** - replacing ChatGPT, Claude, Gemini 
 
 **MVP vs Later:**
 
-| Feature | MVP | Later |
-|---------|-----|-------|
-| AI chat integrated in app | ✓ | |
-| Conversations auto-saved & organized | ✓ | |
-| Context-aware (AI sees your notes/history) | ✓ | |
-| Switch between models | ✓ | |
-| Side-by-side model comparison | | ✓ |
-| Sequential "ask another model" | | ✓ |
-| Smart routing by task type | | ✓ |
+| Feature                                    | MVP | Later |
+| ------------------------------------------ | --- | ----- |
+| AI chat integrated in app                  | ✓   |       |
+| Conversations auto-saved & organized       | ✓   |       |
+| Context-aware (AI sees your notes/history) | ✓   |       |
+| Switch between models                      | ✓   |       |
+| Side-by-side model comparison              |     | ✓     |
+| Sequential "ask another model"             |     | ✓     |
+| Smart routing by task type                 |     | ✓     |
 
 ---
 
@@ -276,21 +283,21 @@ Calendar is a **core pillar** - the system manages your time, not just your info
 
 **Five Calendar Features:**
 
-| Feature | What It Does |
-|---------|--------------|
-| View calendar | Unified view of your time inside the app |
-| Create events | AI creates blocks for prioritized actions (with approval) |
-| Protect focus | System defends deep work time, warns about fragmentation |
-| Smart scheduling | "Find time for X" - AI scans calendar, proposes slots |
-| Meeting prep | Before meetings, surfaces relevant notes, past conversations, action history |
+| Feature          | What It Does                                                                 |
+| ---------------- | ---------------------------------------------------------------------------- |
+| View calendar    | Unified view of your time inside the app                                     |
+| Create events    | AI creates blocks for prioritized actions (with approval)                    |
+| Protect focus    | System defends deep work time, warns about fragmentation                     |
+| Smart scheduling | "Find time for X" - AI scans calendar, proposes slots                        |
+| Meeting prep     | Before meetings, surfaces relevant notes, past conversations, action history |
 
 **Three Scarce Resources Managed:**
 
-| Resource | How System Helps |
-|----------|------------------|
-| Attention | Unified inbox, AI triage, swipe review |
-| Memory | Capture everything, semantic search, context-aware AI |
-| Time | Calendar integration, smart scheduling, focus protection |
+| Resource  | How System Helps                                         |
+| --------- | -------------------------------------------------------- |
+| Attention | Unified inbox, AI triage, swipe review                   |
+| Memory    | Capture everything, semantic search, context-aware AI    |
+| Time      | Calendar integration, smart scheduling, focus protection |
 
 **Updated Weekly Review Flow:**
 
@@ -310,7 +317,8 @@ Step 5: Process remaining inbox
 ## Idea Categorization
 
 ### Immediate Opportunities
-*Ideas ready to implement now*
+
+_Ideas ready to implement now_
 
 1. **Unified Inbox with AI Triage**
    - Description: Single entry point for all captured items with AI pre-classification
@@ -338,7 +346,8 @@ Step 5: Process remaining inbox
    - Resources needed: LLM API integrations (OpenAI, Anthropic, Google), chat UI
 
 ### Future Innovations
-*Ideas requiring development/research*
+
+_Ideas requiring development/research_
 
 1. **Progressive Trust Model**
    - Description: AI earns autonomy based on user feedback over time
@@ -366,7 +375,8 @@ Step 5: Process remaining inbox
    - Timeline estimate: After basic calendar integration works
 
 ### Moonshots
-*Ambitious, transformative concepts*
+
+_Ambitious, transformative concepts_
 
 1. **Meeting AI Pipeline**
    - Description: Auto-transcribe, summarize, extract actions from Teams/in-person meetings
@@ -394,7 +404,8 @@ Step 5: Process remaining inbox
    - Challenges to overcome: Model benchmarking, cost optimization, latency
 
 ### Insights & Learnings
-*Key realizations from the session*
+
+_Key realizations from the session_
 
 - **Capture isn't the problem, retrieval is:** Current tools are graveyards because nothing forces processing
 - **One behavior only:** User should only capture; everything else is automated
@@ -410,18 +421,21 @@ Step 5: Process remaining inbox
 ### Top 3 Priority Ideas
 
 #### #1 Priority: Unified Inbox with AI Triage
+
 - Rationale: Foundation of entire system; solves fragmentation and graveyard problems
 - Next steps: Design database schema, define AI classification categories, build input connectors (email, photos, voice)
 - Resources needed: AI/ML expertise, backend infrastructure, API integrations
 - Timeline: Core MVP feature
 
 #### #2 Priority: Daily Swipe Review UX
+
 - Rationale: Makes the system sticky; solves the "reviews feel heavy" problem
 - Next steps: Design swipe card UI, implement gesture handling, build AI confidence display
 - Resources needed: Mobile UI/UX design, frontend development
 - Timeline: Core MVP feature
 
 #### #3 Priority: PARA + OneDrive Integration
+
 - Rationale: Enables the "deliverables flow back into system" loop
 - Next steps: Implement OneDrive connector, create PARA folder structure, build sync mechanism
 - Resources needed: OneDrive API documentation, file indexing logic
@@ -432,33 +446,38 @@ Step 5: Process remaining inbox
 ## Reflection & Follow-up
 
 ### What Worked Well
+
 - Starting from existing pre-brief gave strong foundation
 - Zone-by-zone exploration covered all critical areas
 - Stress-testing assumptions revealed hidden design decisions
 - External article principles aligned and enriched the vision
 
 ### Areas for Further Exploration
+
 - **Meeting pipeline specifics:** How exactly does transcription → action extraction work?
 - **Email connector rules:** Does every email enter inbox or only flagged ones?
 - **Mobile vs desktop UX:** How different are the experiences?
 - **Onboarding flow:** How does a new user set up yearly/monthly objectives?
 
 ### Recommended Follow-up Techniques
+
 - **User journey mapping:** Walk through a full week in the life of a user
 - **Wireframe prototyping:** Visual mockups of key screens (swipe, weekly review, creation mode)
 - **Technical architecture:** Database schema, API design, AI pipeline
 
 ### Questions That Emerged
+
 - How do you handle shared projects (collaboration)?
 - What happens to actions with deadlines that pass?
 - Should there be notifications/reminders, or is it purely pull-based?
 - How does the system handle different languages (FR/EN mentioned in brief)?
 
 ### Next Session Planning
+
 - **Suggested topics:** Technical architecture deep-dive OR UX wireframing
 - **Recommended timeframe:** After digesting this session's outputs
 - **Preparation needed:** Prioritize which moonshots to include in MVP vs later
 
 ---
 
-*Session facilitated using the BMAD-METHOD™ brainstorming framework*
+_Session facilitated using the BMAD-METHOD™ brainstorming framework_

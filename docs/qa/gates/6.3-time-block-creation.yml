@@ -1,0 +1,114 @@
+# QA Gate - Story 6.3: Time Block Creation
+# Generated: 2026-01-12
+# Re-reviewed: 2026-01-12
+# Reviewer: Quinn (Test Architect)
+
+schema: 1
+story: "6.3"
+gate: PASS
+status_reason: "All HIGH severity issues resolved. Story now uses action.description correctly and reads work hours from user settings."
+reviewer: "Quinn"
+updated: "2026-01-12T15:00:00Z"
+
+# RESOLVED Issues from Previous Review
+resolved_issues:
+  - id: "REQ-001"
+    severity: "was HIGH"
+    finding: "Story code referenced action.title but Action model only has description"
+    resolution: "FIXED - Story now correctly uses action.description (lines 89, 387, 527)"
+
+  - id: "MNT-002"
+    severity: "was LOW"
+    finding: "WORK_START_HOUR and WORK_END_HOUR were hardcoded"
+    resolution: "FIXED - Now reads from user.settings via getUserWorkSettings() (lines 236-243)"
+
+# Remaining Issues
+top_issues:
+  - id: "SEC-001"
+    severity: medium
+    finding: "createCalDAVEvent uses string concatenation for VCALENDAR - potential injection risk with event.title"
+    suggested_action: "Use proper iCal library (ical-generator) for safe VCALENDAR creation"
+    notes: "Acceptable for initial implementation; recommend hardening in future iteration"
+
+  - id: "REQ-002"
+    severity: medium
+    finding: "No Google Calendar (google_oauth) event creation implementation shown"
+    suggested_action: "Add GoogleCalendarClient implementation or explicitly defer to future story"
+    notes: "CalDAV and MS Graph cover primary use cases; Google can be added later"
+
+  - id: "MNT-001"
+    severity: low
+    finding: "getFreeSlots filter logic comment explains purpose but could be clearer"
+    suggested_action: "Logic is now documented in comments (lines 305-307)"
+    notes: "Comments explain the business logic - acceptable"
+
+  - id: "MNT-003"
+    severity: low
+    finding: "Reschedule flow doesn't explicitly delete old event before creating new one"
+    suggested_action: "Add deleteTimeBlock call before createTimeBlock when action already has calendarEventId"
+    notes: "Can be handled during implementation"
+
+waiver:
+  active: false
+
+# Schema Validation
+schema_alignment:
+  Action_model:
+    scheduledFor: "EXISTS - schema line 186"
+    calendarEventId: "EXISTS - schema line 187 with @unique"
+    description: "EXISTS - schema line 182"
+  CalendarEvent:
+    action_relation: "EXISTS - schema line 459 as reverse relation"
+  notes: "Schema fully supports time block functionality"
+
+# Acceptance Criteria Coverage
+acceptance_criteria:
+  AC1: { status: "COVERED", notes: "Uses action.description correctly (line 89)" }
+  AC2: { status: "COVERED", notes: "getFreeSlots with user work settings (lines 231-339)" }
+  AC3: { status: "COVERED", notes: "Duration selector with 30m, 1h, 2h, custom presets (lines 106-140)" }
+  AC4: { status: "PARTIAL", notes: "CalDAV and MS Graph implemented; Google missing" }
+  AC5: { status: "COVERED", notes: "calendarEventId relation links action to event" }
+  AC6: { status: "COVERED", notes: "hasConflict flag with visual warning (lines 162-169)" }
+
+# NFR Validation
+nfr_validation:
+  security:
+    status: "CONCERNS"
+    notes: "VCALENDAR string concatenation - recommend ical library for hardening"
+  reliability:
+    status: "PASS"
+    notes: "Error handling with TRPCError for common cases"
+  usability:
+    status: "PASS"
+    notes: "User-configurable work hours from settings"
+
+# Test Design Gaps
+test_design:
+  coverage_gaps:
+    - "Unit tests for getFreeSlots calculation with various event patterns"
+    - "Integration test for CalDAV event creation"
+    - "Integration test for MS Graph event creation"
+    - "Error handling test for provider unavailable"
+    - "Reschedule flow test (update existing event)"
+
+# Dependencies
+dependencies:
+  - name: "Story 6.1 (Calendar Integration - Read)"
+    status: "REQUIRED"
+    notes: "Calendar read functionality and CalendarAccount must exist"
+  - name: "Action model"
+    status: "EXISTS"
+    notes: "Model exists with scheduledFor and calendarEventId fields"
+  - name: "User settings"
+    status: "EXISTS"
+    notes: "getUserWorkSettings helper reused from Story 6.2"
+
+# Recommendations
+recommendations:
+  must_fix: []
+  should_fix:
+    - "Use iCal library for VCALENDAR generation (security hardening)"
+    - "Add Google Calendar client in future iteration"
+  nice_to_have:
+    - "Add explicit reschedule flow (delete old event first)"
+    - "Add provider error handling for retries"

@@ -6,390 +6,97 @@ This document describes how to configure n8n to process inbox items and classify
 
 - n8n instance running on your VPS
 - OpenAI API key or Anthropic API key
-- Bee application deployed with webhook endpoints
+- Supabase project (for entity linking - optional)
 
 ## Environment Variables
 
 Set these environment variables in your n8n instance:
 
 ```bash
-# Bee Application
-BEE_CALLBACK_URL=https://your-bee-domain.com/api/webhooks/classification-complete
-BEE_API_URL=https://your-bee-domain.com/api
-BEE_WEBHOOK_SECRET=your-secure-webhook-secret-here
-
 # AI Provider (choose one)
 OPENAI_API_KEY=sk-...
 # OR
 ANTHROPIC_API_KEY=sk-ant-...
+
+# Supabase (optional - for entity linking)
+SUPABASE_URL=https://ltugyvocpmdjlnzfjbat.supabase.co
+SUPABASE_SERVICE_KEY=your-service-role-key
 ```
+
+**Note:** The callback URL and webhook secret are passed in each request from Bee, so no additional Bee configuration is needed in n8n.
 
 ## Workflow Overview
 
 ```
-[Webhook Trigger] → [AI Classification] → [AI Action Extraction] → [AI Tag Extraction] → [Fetch Entities] → [Build Payload] → [Call Bee Callback]
+[Webhook Trigger] → [Respond to Webhook (ACK)] → [AI Classification] → [HTTP Request (Callback)]
 ```
 
-## Node Configuration
+The workflow uses the **Respond to Webhook** node to immediately acknowledge the request (HTTP 202), then processes asynchronously and calls back to Bee when complete.
 
-### Node 1: Webhook Trigger
+## Bee App Configuration
 
-Receives classification requests from Bee application.
+Add to your `.env`:
 
-- **Node Type:** Webhook
-- **HTTP Method:** POST
-- **Path:** `classify-inbox-item`
-- **Response Mode:** Immediately
+```bash
+# n8n webhook URL
+N8N_CLASSIFY_WEBHOOK_URL=https://your-n8n.com/webhook/classify-inbox-item
 
-Expected payload:
-```json
-{
-  "inboxItemId": "uuid",
-  "content": "text content to classify",
-  "source": "manual|voice|email|forward",
-  "type": "manual|image|voice|email|forward",
-  "createdAt": "2024-01-01T00:00:00.000Z",
-  "callbackUrl": "https://bee.example.com/api/webhooks/classification-complete"
-}
+# Optional: shared secret for webhook auth (leave empty for no auth)
+# N8N_WEBHOOK_SECRET=your-secret
 ```
 
-### Node 2: AI Classification (OpenAI/Claude)
+---
 
-Classify the content into categories with confidence score.
+## Complete E2E Workflow JSON (Full Features)
 
-**System Prompt:**
-```
-You are a classification assistant. Analyze the following content and classify it into one of these categories:
-- action: A task or to-do item that requires action
-- note: General information, thoughts, or ideas to remember
-- reference: Reference material, links, documentation, or resources to save
-- meeting: Meeting notes, appointments, or calendar-related content
-- unknown: Content that doesn't fit other categories
-
-Respond in JSON format:
-{
-  "category": "action|note|reference|meeting|unknown",
-  "confidence": 0.0-1.0,
-  "reasoning": "Brief explanation of classification"
-}
-```
-
-### Node 3: AI Action Extraction (OpenAI/Claude)
-
-Extract action items from the content.
-
-**System Prompt:**
-```
-Extract action items from the following content. For each action, identify:
-- description: What needs to be done
-- owner: Who should do it (if mentioned)
-- dueDate: When it's due (if mentioned, ISO format)
-- priority: urgent|high|normal|low based on context
-
-Respond in JSON format:
-{
-  "actions": [
-    {
-      "description": "Action description",
-      "confidence": 0.0-1.0,
-      "owner": "Person name or null",
-      "dueDate": "ISO date or null",
-      "priority": "normal"
-    }
-  ]
-}
-
-If no actions are found, return: { "actions": [] }
-```
-
-### Node 4: AI Tag Extraction (OpenAI/Claude)
-
-Extract relevant tags from the content.
-
-**System Prompt:**
-```
-Extract tags from the following content. Identify:
-- topic: Main topics or themes
-- person: People mentioned
-- project: Project names (will be linked if exists in system)
-- area: Life/work areas (will be linked if exists in system)
-- date: Dates mentioned (ISO format)
-- location: Places mentioned
-
-Respond in JSON format:
-{
-  "tags": [
-    {
-      "type": "topic|person|project|area|date|location",
-      "value": "Tag value",
-      "confidence": 0.0-1.0
-    }
-  ]
-}
-```
-
-### Node 5: Fetch Projects (HTTP Request)
-
-Lookup existing projects for entity linking.
-
-- **Method:** GET
-- **URL:** `{{ $env.BEE_API_URL }}/projects`
-- **Continue on Fail:** true
-
-### Node 6: Fetch Areas (HTTP Request)
-
-Lookup existing areas for entity linking.
-
-- **Method:** GET
-- **URL:** `{{ $env.BEE_API_URL }}/areas`
-- **Continue on Fail:** true
-
-### Node 7: Build Final Payload (Code Node)
-
-```javascript
-const startTime = $('Webhook Trigger').first().json._startTime || Date.now();
-const processingTimeMs = Date.now() - startTime;
-
-const classification = $('AI Classification').first().json;
-const actionsData = $('AI Action Extraction').first().json;
-const tagsData = $('AI Tag Extraction').first().json;
-const projects = $('Fetch Projects').first().json?.projects || [];
-const areas = $('Fetch Areas').first().json?.areas || [];
-
-// Link tags to entities
-const linkedTags = (tagsData.tags || []).map(tag => {
-  let linkedId = null;
-
-  if (tag.type === 'project') {
-    const match = projects.find(p =>
-      p.name.toLowerCase() === tag.value.toLowerCase()
-    );
-    if (match) linkedId = match.id;
-  }
-
-  if (tag.type === 'area') {
-    const match = areas.find(a =>
-      a.name.toLowerCase() === tag.value.toLowerCase()
-    );
-    if (match) linkedId = match.id;
-  }
-
-  return {
-    ...tag,
-    linkedId
-  };
-});
-
-// Add unique IDs to actions
-const actionsWithIds = (actionsData.actions || []).map((action, index) => ({
-  id: `${$('Webhook Trigger').first().json.inboxItemId}-action-${index}`,
-  ...action
-}));
-
-return {
-  inboxItemId: $('Webhook Trigger').first().json.inboxItemId,
-  classification: {
-    category: classification.category,
-    confidence: classification.confidence,
-    reasoning: classification.reasoning
-  },
-  extractedActions: actionsWithIds,
-  tags: linkedTags,
-  modelUsed: 'gpt-4o-mini', // or 'claude-3-haiku'
-  processingTimeMs
-};
-```
-
-### Node 8: Call Bee Callback (HTTP Request)
-
-Send the classification results back to Bee.
-
-- **Method:** POST
-- **URL:** `{{ $('Webhook Trigger').first().json.callbackUrl }}`
-- **Headers:**
-  - `Content-Type`: `application/json`
-  - `X-Webhook-Secret`: `{{ $env.BEE_WEBHOOK_SECRET }}`
-- **Body:** `{{ JSON.stringify($json) }}`
-
-## Complete Workflow JSON
-
-Import this JSON directly into n8n:
+**Import this directly into n8n** - includes:
+- Immediate acknowledgment via Respond to Webhook node (HTTP 202)
+- Classification, action extraction, tag extraction (parallel AI calls)
+- Entity linking with Supabase
+- Error handling with callback
 
 ```json
 {
-  "name": "Bee AI Classification",
+  "name": "Bee AI Classification (Full)",
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "classify-inbox-item",
-        "responseMode": "onReceived",
+        "responseMode": "responseNode",
         "options": {}
       },
-      "id": "webhook-trigger",
+      "id": "d2c5b8a1-1234-4567-8901-abcdef123456",
       "name": "Webhook Trigger",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [250, 300],
       "webhookId": "bee-classify"
     },
     {
       "parameters": {
-        "jsCode": "return { ...items[0].json, _startTime: Date.now() };"
+        "respondWith": "json",
+        "responseBody": "={{ { \"acknowledged\": true, \"inboxItemId\": $json.inboxItemId, \"message\": \"Classification started\" } }}",
+        "options": {
+          "responseCode": 202
+        }
       },
-      "id": "set-start-time",
-      "name": "Set Start Time",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "id": "e1f2a3b4-2345-5678-9012-bcdef1234567",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
       "position": [450, 300]
     },
     {
       "parameters": {
-        "resource": "chat",
-        "model": "gpt-4o-mini",
-        "messages": {
-          "values": [
-            {
-              "content": "You are a classification assistant. Analyze the following content and classify it into one of these categories:\n- action: A task or to-do item that requires action\n- note: General information, thoughts, or ideas to remember\n- reference: Reference material, links, documentation, or resources to save\n- meeting: Meeting notes, appointments, or calendar-related content\n- unknown: Content that doesn't fit other categories\n\nRespond in JSON format only:\n{\"category\": \"action|note|reference|meeting|unknown\", \"confidence\": 0.0-1.0, \"reasoning\": \"Brief explanation\"}"
-            },
-            {
-              "role": "user",
-              "content": "={{ $json.content }}"
-            }
-          ]
-        },
-        "options": {
-          "temperature": 0.3,
-          "responseFormat": "json_object"
-        }
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Bee AI Classification - Full E2E Workflow\n// Performs: Classification, Action Extraction, Tag Extraction, Entity Linking\n\nconst input = $input.first().json;\nconst startTime = Date.now();\n\n// Validate required fields\nif (!input.inboxItemId || !input.content || !input.callbackUrl) {\n  throw new Error('Missing required fields: inboxItemId, content, or callbackUrl');\n}\n\n// System prompts for each AI task\nconst CLASSIFICATION_PROMPT = `You are a classification assistant for a personal productivity app.\nClassify the content into ONE of these categories:\n- action: A task, to-do item, or something that requires action\n- note: General information, ideas, thoughts, or observations\n- reference: Material to save for later reference (articles, links, quotes)\n- meeting: Meeting notes, calendar-related, or scheduling content\n- unknown: Doesn't fit other categories\n\nRespond ONLY with valid JSON:\n{\"category\": \"action|note|reference|meeting|unknown\", \"confidence\": 0.0-1.0, \"reasoning\": \"brief explanation\"}`;\n\nconst ACTIONS_PROMPT = `Extract action items from the content. An action is a task that needs to be done.\nFor each action, identify:\n- description: What needs to be done\n- confidence: How confident you are this is an action (0.0-1.0)\n- owner: Person responsible (null if not mentioned)\n- dueDate: Due date in ISO format (null if not mentioned)\n- priority: urgent, high, normal, or low (default: normal)\n\nRespond ONLY with valid JSON:\n{\"actions\": [{\"description\": \"...\", \"confidence\": 0.0-1.0, \"owner\": null, \"dueDate\": null, \"priority\": \"normal\"}]}\n\nIf no actions found, return: {\"actions\": []}`;\n\nconst TAGS_PROMPT = `Extract relevant tags from the content.\nTag types:\n- topic: Subject matter or theme\n- person: Names of people mentioned\n- project: Project names mentioned\n- area: Areas of responsibility (work, health, finance, etc.)\n- date: Dates or time references\n- location: Places mentioned\n\nRespond ONLY with valid JSON:\n{\"tags\": [{\"type\": \"topic|person|project|area|date|location\", \"value\": \"...\", \"confidence\": 0.0-1.0}]}\n\nIf no tags found, return: {\"tags\": []}`;\n\n// Helper function to call OpenAI\nasync function callOpenAI(systemPrompt, userContent) {\n  const response = await fetch('https://api.openai.com/v1/chat/completions', {\n    method: 'POST',\n    headers: {\n      'Content-Type': 'application/json',\n      'Authorization': `Bearer ${$env.OPENAI_API_KEY}`\n    },\n    body: JSON.stringify({\n      model: 'gpt-4o-mini',\n      messages: [\n        { role: 'system', content: systemPrompt },\n        { role: 'user', content: userContent }\n      ],\n      temperature: 0.3,\n      response_format: { type: 'json_object' }\n    })\n  });\n  \n  if (!response.ok) {\n    const error = await response.text();\n    throw new Error(`OpenAI API error: ${response.status} - ${error}`);\n  }\n  \n  const result = await response.json();\n  return JSON.parse(result.choices[0].message.content);\n}\n\n// Run all AI calls in parallel for speed\nconst [classification, actionsResult, tagsResult] = await Promise.all([\n  callOpenAI(CLASSIFICATION_PROMPT, input.content),\n  callOpenAI(ACTIONS_PROMPT, input.content),\n  callOpenAI(TAGS_PROMPT, input.content)\n]);\n\n// Fetch entities from Supabase for linking (optional)\nlet projects = [];\nlet areas = [];\n\nif ($env.SUPABASE_URL && $env.SUPABASE_SERVICE_KEY) {\n  try {\n    const [projectsRes, areasRes] = await Promise.all([\n      fetch(`${$env.SUPABASE_URL}/rest/v1/Project?select=id,name&status=eq.active`, {\n        headers: {\n          'apikey': $env.SUPABASE_SERVICE_KEY,\n          'Authorization': `Bearer ${$env.SUPABASE_SERVICE_KEY}`\n        }\n      }),\n      fetch(`${$env.SUPABASE_URL}/rest/v1/Area?select=id,name`, {\n        headers: {\n          'apikey': $env.SUPABASE_SERVICE_KEY,\n          'Authorization': `Bearer ${$env.SUPABASE_SERVICE_KEY}`\n        }\n      })\n    ]);\n    \n    if (projectsRes.ok) projects = await projectsRes.json();\n    if (areasRes.ok) areas = await areasRes.json();\n  } catch (e) {\n    // Supabase fetch failed, continue without entity linking\n    console.log('Supabase fetch failed:', e.message);\n  }\n}\n\n// Link tags to entities (fuzzy match by name)\nconst linkedTags = (tagsResult.tags || []).map(tag => {\n  let linkedId = null;\n  \n  if (tag.type === 'project' && projects.length > 0) {\n    const match = projects.find(p => \n      p.name.toLowerCase().includes(tag.value.toLowerCase()) ||\n      tag.value.toLowerCase().includes(p.name.toLowerCase())\n    );\n    if (match) linkedId = match.id;\n  }\n  \n  if (tag.type === 'area' && areas.length > 0) {\n    const match = areas.find(a => \n      a.name.toLowerCase().includes(tag.value.toLowerCase()) ||\n      tag.value.toLowerCase().includes(a.name.toLowerCase())\n    );\n    if (match) linkedId = match.id;\n  }\n  \n  return { ...tag, linkedId };\n});\n\n// Add unique IDs to actions\nconst actionsWithIds = (actionsResult.actions || []).map((action, i) => ({\n  id: `${input.inboxItemId}-action-${i}`,\n  ...action\n}));\n\n// Return as array (n8n Code node requirement)\nreturn [{\n  json: {\n    inboxItemId: input.inboxItemId,\n    callbackUrl: input.callbackUrl,\n    classification: {\n      category: classification.category,\n      confidence: classification.confidence,\n      reasoning: classification.reasoning\n    },\n    extractedActions: actionsWithIds,\n    tags: linkedTags,\n    modelUsed: 'gpt-4o-mini',\n    processingTimeMs: Date.now() - startTime\n  }\n}];"
       },
-      "id": "ai-classification",
+      "id": "a1b2c3d4-5678-9012-3456-789012345678",
       "name": "AI Classification",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1,
-      "position": [650, 200],
-      "credentials": {
-        "openAiApi": {
-          "id": "OPENAI_CREDENTIAL_ID",
-          "name": "OpenAI API"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "resource": "chat",
-        "model": "gpt-4o-mini",
-        "messages": {
-          "values": [
-            {
-              "content": "Extract action items from the following content. For each action, identify description, owner (if mentioned), dueDate (ISO format if mentioned), and priority (urgent|high|normal|low).\n\nRespond in JSON format only:\n{\"actions\": [{\"description\": \"...\", \"confidence\": 0.0-1.0, \"owner\": null, \"dueDate\": null, \"priority\": \"normal\"}]}\n\nIf no actions found, return: {\"actions\": []}"
-            },
-            {
-              "role": "user",
-              "content": "={{ $('Set Start Time').first().json.content }}"
-            }
-          ]
-        },
-        "options": {
-          "temperature": 0.3,
-          "responseFormat": "json_object"
-        }
-      },
-      "id": "ai-action-extraction",
-      "name": "AI Action Extraction",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1,
-      "position": [650, 400],
-      "credentials": {
-        "openAiApi": {
-          "id": "OPENAI_CREDENTIAL_ID",
-          "name": "OpenAI API"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "resource": "chat",
-        "model": "gpt-4o-mini",
-        "messages": {
-          "values": [
-            {
-              "content": "Extract tags from the following content. Tag types: topic, person, project, area, date (ISO format), location.\n\nRespond in JSON format only:\n{\"tags\": [{\"type\": \"topic|person|project|area|date|location\", \"value\": \"...\", \"confidence\": 0.0-1.0}]}"
-            },
-            {
-              "role": "user",
-              "content": "={{ $('Set Start Time').first().json.content }}"
-            }
-          ]
-        },
-        "options": {
-          "temperature": 0.3,
-          "responseFormat": "json_object"
-        }
-      },
-      "id": "ai-tag-extraction",
-      "name": "AI Tag Extraction",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1,
-      "position": [650, 600],
-      "credentials": {
-        "openAiApi": {
-          "id": "OPENAI_CREDENTIAL_ID",
-          "name": "OpenAI API"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "={{ $env.BEE_API_URL }}/projects",
-        "options": {
-          "timeout": 5000
-        }
-      },
-      "id": "fetch-projects",
-      "name": "Fetch Projects",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [900, 200],
-      "continueOnFail": true
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "={{ $env.BEE_API_URL }}/areas",
-        "options": {
-          "timeout": 5000
-        }
-      },
-      "id": "fetch-areas",
-      "name": "Fetch Areas",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [900, 400],
-      "continueOnFail": true
-    },
-    {
-      "parameters": {
-        "mode": "raw",
-        "jsonOutput": "={\n  \"classification\": {{ $('AI Classification').first().json.message.content }},\n  \"actions\": {{ $('AI Action Extraction').first().json.message.content }},\n  \"tags\": {{ $('AI Tag Extraction').first().json.message.content }},\n  \"projects\": {{ JSON.stringify($('Fetch Projects').first().json.projects || []) }},\n  \"areas\": {{ JSON.stringify($('Fetch Areas').first().json.areas || []) }},\n  \"startTime\": {{ $('Set Start Time').first().json._startTime }},\n  \"inboxItemId\": \"{{ $('Set Start Time').first().json.inboxItemId }}\",\n  \"callbackUrl\": \"{{ $('Set Start Time').first().json.callbackUrl }}\"\n}",
-        "options": {}
-      },
-      "id": "merge-results",
-      "name": "Merge Results",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3,
-      "position": [1100, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "const data = items[0].json;\nconst processingTimeMs = Date.now() - data.startTime;\n\nconst classification = typeof data.classification === 'string' \n  ? JSON.parse(data.classification) \n  : data.classification;\nconst actionsData = typeof data.actions === 'string' \n  ? JSON.parse(data.actions) \n  : data.actions;\nconst tagsData = typeof data.tags === 'string' \n  ? JSON.parse(data.tags) \n  : data.tags;\nconst projects = data.projects || [];\nconst areas = data.areas || [];\n\n// Link tags to entities\nconst linkedTags = (tagsData.tags || []).map(tag => {\n  let linkedId = null;\n  \n  if (tag.type === 'project') {\n    const match = projects.find(p => \n      p.name.toLowerCase() === tag.value.toLowerCase()\n    );\n    if (match) linkedId = match.id;\n  }\n  \n  if (tag.type === 'area') {\n    const match = areas.find(a => \n      a.name.toLowerCase() === tag.value.toLowerCase()\n    );\n    if (match) linkedId = match.id;\n  }\n  \n  return { ...tag, linkedId };\n});\n\n// Add unique IDs to actions\nconst actionsWithIds = (actionsData.actions || []).map((action, index) => ({\n  id: `${data.inboxItemId}-action-${index}`,\n  ...action\n}));\n\nreturn {\n  json: {\n    inboxItemId: data.inboxItemId,\n    callbackUrl: data.callbackUrl,\n    classification: {\n      category: classification.category,\n      confidence: classification.confidence,\n      reasoning: classification.reasoning\n    },\n    extractedActions: actionsWithIds,\n    tags: linkedTags,\n    modelUsed: 'gpt-4o-mini',\n    processingTimeMs\n  }\n};"
-      },
-      "id": "build-payload",
-      "name": "Build Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1300, 300]
+      "position": [650, 300]
     },
     {
       "parameters": {
@@ -401,25 +108,60 @@ Import this JSON directly into n8n:
             {
               "name": "Content-Type",
               "value": "application/json"
-            },
-            {
-              "name": "X-Webhook-Secret",
-              "value": "={{ $env.BEE_WEBHOOK_SECRET }}"
             }
           ]
         },
         "sendBody": true,
+        "contentType": "json",
         "specifyBody": "json",
         "jsonBody": "={\n  \"inboxItemId\": \"{{ $json.inboxItemId }}\",\n  \"classification\": {{ JSON.stringify($json.classification) }},\n  \"extractedActions\": {{ JSON.stringify($json.extractedActions) }},\n  \"tags\": {{ JSON.stringify($json.tags) }},\n  \"modelUsed\": \"{{ $json.modelUsed }}\",\n  \"processingTimeMs\": {{ $json.processingTimeMs }}\n}",
         "options": {
-          "timeout": 10000
+          "timeout": 30000
         }
       },
-      "id": "call-callback",
+      "id": "b2c3d4e5-6789-0123-4567-890123456789",
       "name": "Call Bee Callback",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [1500, 300]
+      "typeVersion": 4.3,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Error handler - builds error response for callback\nconst input = $input.first().json;\nconst errorInfo = $execution?.error || { message: 'Unknown error occurred' };\n\nreturn [{\n  json: {\n    inboxItemId: input.inboxItemId || 'unknown',\n    callbackUrl: input.callbackUrl,\n    error: errorInfo.message || String(errorInfo),\n    classification: {\n      category: 'unknown',\n      confidence: 0,\n      reasoning: `Classification failed: ${errorInfo.message || 'Unknown error'}`\n    },\n    extractedActions: [],\n    tags: [],\n    modelUsed: 'error',\n    processingTimeMs: 0\n  }\n}];"
+      },
+      "id": "c3d4e5f6-7890-1234-5678-901234567890",
+      "name": "Handle Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callbackUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"inboxItemId\": \"{{ $json.inboxItemId }}\",\n  \"classification\": {{ JSON.stringify($json.classification) }},\n  \"extractedActions\": {{ JSON.stringify($json.extractedActions) }},\n  \"tags\": {{ JSON.stringify($json.tags) }},\n  \"modelUsed\": \"{{ $json.modelUsed }}\",\n  \"processingTimeMs\": {{ $json.processingTimeMs }},\n  \"error\": \"{{ $json.error }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "d4e5f6a7-8901-2345-6789-012345678901",
+      "name": "Send Error Callback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [850, 500]
     }
   ],
   "connections": {
@@ -427,28 +169,18 @@ Import this JSON directly into n8n:
       "main": [
         [
           {
-            "node": "Set Start Time",
+            "node": "Respond to Webhook",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Set Start Time": {
+    "Respond to Webhook": {
       "main": [
         [
           {
             "node": "AI Classification",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "AI Action Extraction",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "AI Tag Extraction",
             "type": "main",
             "index": 0
           }
@@ -459,73 +191,18 @@ Import this JSON directly into n8n:
       "main": [
         [
           {
-            "node": "Fetch Projects",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "AI Action Extraction": {
-      "main": [
-        [
-          {
-            "node": "Fetch Areas",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "AI Tag Extraction": {
-      "main": [
-        [
-          {
-            "node": "Merge Results",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Fetch Projects": {
-      "main": [
-        [
-          {
-            "node": "Merge Results",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Fetch Areas": {
-      "main": [
-        [
-          {
-            "node": "Merge Results",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Merge Results": {
-      "main": [
-        [
-          {
-            "node": "Build Payload",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Payload": {
-      "main": [
-        [
-          {
             "node": "Call Bee Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Error": {
+      "main": [
+        [
+          {
+            "node": "Send Error Callback",
             "type": "main",
             "index": 0
           }
@@ -537,72 +214,182 @@ Import this JSON directly into n8n:
     "executionOrder": "v1"
   },
   "staticData": null,
-  "tags": [],
-  "triggerCount": 0,
   "pinData": {}
 }
 ```
 
-## Alternative: Claude (Anthropic) Configuration
+### How to Import
 
-If using Claude instead of OpenAI, replace the AI nodes with:
+1. Open your n8n instance
+2. Go to **Workflows** → **Import from File** (or paste JSON)
+3. Copy the JSON above and paste it
+4. Click **Import**
+5. Set up your credentials:
+   - Add `OPENAI_API_KEY` in n8n Settings → Environment Variables
+   - Optionally add `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` for entity linking
+6. **Activate** the workflow
+
+### Key Node Configuration
+
+| Node | Type Version | Purpose | Key Settings |
+|------|--------------|---------|--------------|
+| **Webhook Trigger** | 2.1 | Receives POST from Bee | `responseMode: "responseNode"` |
+| **Respond to Webhook** | 1.5 | Immediately acknowledges | Returns 202 with `{ acknowledged: true }` |
+| **AI Classification** | 2 | Processes content | Parallel OpenAI calls, returns array |
+| **Call Bee Callback** | 4.3 | Sends results back | POSTs to `callbackUrl` |
+
+---
+
+## Minimal Workflow JSON (Classification Only)
+
+If you only need basic classification without actions/tags:
 
 ```json
 {
-  "parameters": {
-    "model": "claude-3-haiku-20240307",
-    "messages": {
-      "values": [
-        {
-          "role": "user",
-          "content": "You are a classification assistant. Analyze this content and respond with JSON only: {\"category\": \"action|note|reference|meeting|unknown\", \"confidence\": 0.0-1.0, \"reasoning\": \"...\"}\n\nContent: {{ $json.content }}"
-        }
-      ]
+  "name": "Bee AI Classification (Minimal)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "classify-inbox-item",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [250, 300],
+      "webhookId": "bee-classify"
     },
-    "options": {
-      "temperature": 0.3,
-      "maxTokens": 500
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"acknowledged\": true, \"inboxItemId\": $json.inboxItemId } }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "respond-ack",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input = $input.first().json;\nconst startTime = Date.now();\n\nif (!input.content || !input.callbackUrl) {\n  throw new Error('Missing content or callbackUrl');\n}\n\nconst response = await fetch('https://api.openai.com/v1/chat/completions', {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${$env.OPENAI_API_KEY}`\n  },\n  body: JSON.stringify({\n    model: 'gpt-4o-mini',\n    messages: [\n      {\n        role: 'system',\n        content: 'You are a classification assistant. Classify content into: action (task/to-do), note (information/ideas), reference (save for later), meeting (calendar-related), unknown. Respond in JSON: {\"category\": \"...\", \"confidence\": 0.0-1.0, \"reasoning\": \"...\"}'\n      },\n      { role: 'user', content: input.content }\n    ],\n    temperature: 0.3,\n    response_format: { type: 'json_object' }\n  })\n});\n\nif (!response.ok) {\n  throw new Error(`OpenAI error: ${response.status}`);\n}\n\nconst result = await response.json();\nconst classification = JSON.parse(result.choices[0].message.content);\n\nreturn [{\n  json: {\n    inboxItemId: input.inboxItemId,\n    callbackUrl: input.callbackUrl,\n    classification: {\n      category: classification.category,\n      confidence: classification.confidence,\n      reasoning: classification.reasoning\n    },\n    modelUsed: 'gpt-4o-mini',\n    processingTimeMs: Date.now() - startTime\n  }\n}];"
+      },
+      "id": "ai-classify",
+      "name": "AI Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callbackUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"inboxItemId\": \"{{ $json.inboxItemId }}\",\n  \"classification\": {{ JSON.stringify($json.classification) }},\n  \"modelUsed\": \"{{ $json.modelUsed }}\",\n  \"processingTimeMs\": {{ $json.processingTimeMs }}\n}"
+      },
+      "id": "call-callback",
+      "name": "Call Bee Callback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
+    },
+    "Respond to Webhook": {
+      "main": [[{ "node": "AI Classification", "type": "main", "index": 0 }]]
+    },
+    "AI Classification": {
+      "main": [[{ "node": "Call Bee Callback", "type": "main", "index": 0 }]]
     }
   },
-  "type": "@n8n/n8n-nodes-langchain.anthropic",
-  "credentials": {
-    "anthropicApi": {
-      "id": "ANTHROPIC_CREDENTIAL_ID",
-      "name": "Anthropic API"
-    }
-  }
+  "settings": { "executionOrder": "v1" }
 }
 ```
 
-## Deployment Steps
+---
 
-1. **Import Workflow**
-   - Open n8n
-   - Go to Workflows → Import
-   - Paste the JSON above
-   - Click Import
+## Incoming Payload (from Bee)
 
-2. **Configure Credentials**
-   - Go to Settings → Credentials
-   - Add OpenAI or Anthropic credentials
-   - Update the credential IDs in the workflow nodes
+When Bee captures an inbox item, it sends:
 
-3. **Set Environment Variables**
-   - In n8n settings or .env file, set:
-     - `BEE_API_URL`
-     - `BEE_WEBHOOK_SECRET`
+```json
+{
+  "inboxItemId": "550e8400-e29b-41d4-a716-446655440000",
+  "content": "Remember to call John about the project deadline next Tuesday",
+  "source": "manual",
+  "type": "manual",
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "callbackUrl": "https://your-bee.com/api/webhooks/classification-complete"
+}
+```
 
-4. **Update Bee Configuration**
-   - Set `N8N_CLASSIFY_WEBHOOK_URL` to your n8n webhook URL
-   - Set `N8N_WEBHOOK_SECRET` to match `BEE_WEBHOOK_SECRET`
+## Immediate Response (from Respond to Webhook)
 
-5. **Activate Workflow**
-   - Toggle the workflow to active
-   - Test with a sample inbox item
+Bee receives immediately (HTTP 202):
+
+```json
+{
+  "acknowledged": true,
+  "inboxItemId": "550e8400-e29b-41d4-a716-446655440000",
+  "message": "Classification started"
+}
+```
+
+## Final Callback Payload (to Bee)
+
+After processing, n8n POSTs to callbackUrl:
+
+```json
+{
+  "inboxItemId": "550e8400-e29b-41d4-a716-446655440000",
+  "classification": {
+    "category": "action",
+    "confidence": 0.92,
+    "reasoning": "Contains a clear task: calling John about project deadline"
+  },
+  "extractedActions": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000-action-0",
+      "description": "Call John about project deadline",
+      "confidence": 0.95,
+      "owner": "John",
+      "dueDate": "2024-01-21T00:00:00.000Z",
+      "priority": "normal"
+    }
+  ],
+  "tags": [
+    { "type": "person", "value": "John", "confidence": 0.98, "linkedId": null },
+    { "type": "date", "value": "next Tuesday", "confidence": 0.90, "linkedId": null },
+    { "type": "topic", "value": "project deadline", "confidence": 0.85, "linkedId": null }
+  ],
+  "modelUsed": "gpt-4o-mini",
+  "processingTimeMs": 1250
+}
+```
+
+---
 
 ## Testing
 
-1. Send a test request to the webhook:
+### Test with curl
 
 ```bash
 curl -X POST https://your-n8n.com/webhook/classify-inbox-item \
@@ -613,76 +400,143 @@ curl -X POST https://your-n8n.com/webhook/classify-inbox-item \
     "source": "manual",
     "type": "manual",
     "createdAt": "2024-01-01T00:00:00.000Z",
-    "callbackUrl": "https://your-bee.com/api/webhooks/classification-complete"
+    "callbackUrl": "https://webhook.site/your-unique-id"
   }'
 ```
 
-2. Expected classification result:
+**Expected immediate response (202):**
 ```json
 {
+  "acknowledged": true,
   "inboxItemId": "test-123",
-  "classification": {
-    "category": "action",
-    "confidence": 0.92,
-    "reasoning": "Contains a clear task: calling John about project deadline"
-  },
-  "extractedActions": [
-    {
-      "id": "test-123-action-0",
-      "description": "Call John about the project deadline",
-      "confidence": 0.95,
-      "owner": "John",
-      "dueDate": "2024-01-09T00:00:00.000Z",
-      "priority": "high"
-    }
-  ],
-  "tags": [
-    { "type": "person", "value": "John", "confidence": 0.98 },
-    { "type": "topic", "value": "project deadline", "confidence": 0.85 },
-    { "type": "date", "value": "2024-01-09", "confidence": 0.90 }
-  ],
-  "modelUsed": "gpt-4o-mini",
-  "processingTimeMs": 2150
+  "message": "Classification started"
 }
 ```
 
-## Troubleshooting
+### Test with webhook.site
 
-### Common Issues
+1. Go to https://webhook.site and copy your unique URL
+2. Replace `callbackUrl` in the curl command with your webhook.site URL
+3. Run the curl command
+4. Check webhook.site to see the callback payload
 
-1. **Webhook not receiving requests**
-   - Verify the webhook URL in Bee's `N8N_CLASSIFY_WEBHOOK_URL`
-   - Check n8n is accessible from Bee's server
+---
 
-2. **AI response parsing errors**
-   - Ensure `responseFormat: "json_object"` is set for OpenAI
-   - Check AI prompts specify JSON-only responses
+## Workflow Diagram
 
-3. **Callback failing with 401**
-   - Verify `BEE_WEBHOOK_SECRET` matches in both systems
-   - Check the secret is being sent in `X-Webhook-Secret` header
-
-4. **Entity linking not working**
-   - Verify `/api/projects` and `/api/areas` endpoints are accessible
-   - Check projects/areas exist in the database
-
-### Debug Mode
-
-Add a Set node before the callback to log the payload:
-
-```javascript
-console.log('Final payload:', JSON.stringify($json, null, 2));
-return $json;
+```
+┌─────────────────┐     ┌─────────────────────┐
+│ Webhook Trigger │────▶│ Respond to Webhook  │
+│ (POST request)  │     │ (Returns 202 ACK)   │
+│ typeVersion:2.1 │     │ typeVersion:1.5     │
+└─────────────────┘     └──────────┬──────────┘
+                                   │
+                                   ▼
+                        ┌─────────────────────┐
+                        │  AI Classification  │
+                        │  (3 parallel calls) │
+                        │  + Entity Linking   │
+                        │  typeVersion:2      │
+                        └──────────┬──────────┘
+                                   │
+                    ┌──────────────┼──────────────┐
+                    │              │              │
+               Success          Error            │
+                    │              │              │
+                    ▼              ▼              │
+         ┌─────────────────┐  ┌──────────────┐   │
+         │ Call Bee        │  │ Handle Error │   │
+         │ Callback        │  │              │   │
+         │ typeVersion:4.3 │  └──────┬───────┘   │
+         └─────────────────┘         │           │
+                                     ▼           │
+                              ┌──────────────┐   │
+                              │ Send Error   │   │
+                              │ Callback     │   │
+                              └──────────────┘   │
 ```
 
-## Performance Optimization
+---
 
-For high-volume usage:
+## Troubleshooting
 
-1. **Parallel AI Calls**: The workflow already runs classification, action extraction, and tag extraction in parallel.
+### Webhook not receiving requests
+- Check n8n is accessible from Bee's server
+- Verify `N8N_CLASSIFY_WEBHOOK_URL` in Bee's `.env`
+- Check n8n workflow is **activated**
 
-2. **Caching**: Consider caching project/area lists if they don't change frequently.
+### Immediate response not working
+- Ensure Webhook node has `responseMode: "responseNode"` (not `"onReceived"`)
+- Verify Respond to Webhook node is connected after Webhook Trigger
+- Check Respond to Webhook `typeVersion` is `1.5`
 
-3. **Model Selection**: Use `gpt-4o-mini` or `claude-3-haiku` for fast, cost-effective classification.
+### AI response parsing errors
+- Ensure `response_format: { type: 'json_object' }` is set
+- Check OpenAI API key is valid and has credits
+- Check n8n execution logs for detailed errors
 
-4. **Batch Processing**: For bulk imports, consider a separate batch workflow.
+### Callback returns 401
+- If you set `N8N_WEBHOOK_SECRET` in Bee, add the header in n8n HTTP Request:
+  ```
+  X-Webhook-Secret: {{ $env.BEE_WEBHOOK_SECRET }}
+  ```
+- Or leave `N8N_WEBHOOK_SECRET` unset for no auth (dev mode)
+
+### Supabase entity linking not working
+- Verify `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` are set in n8n
+- Check service role key has access to Project and Area tables
+- Entity linking is optional - workflow works without it
+
+### Timeout errors
+- OpenAI API calls may take 5-15 seconds
+- Default callback timeout is 30 seconds
+- Check n8n execution history for timing details
+
+### Code node errors
+- Code node must return an array of objects: `return [{ json: { ... } }]`
+- Use `$input.first().json` to access input data
+- Check n8n execution logs for JavaScript errors
+
+---
+
+## Advanced: Using Claude Instead of OpenAI
+
+Replace the OpenAI fetch call with:
+
+```javascript
+async function callClaude(systemPrompt, userContent) {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': $env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: 'claude-3-haiku-20240307',
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: [
+        { role: 'user', content: userContent }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Claude API error: ${response.status}`);
+  }
+
+  const result = await response.json();
+  return JSON.parse(result.content[0].text);
+}
+```
+
+Then update `modelUsed` to `'claude-3-haiku'` in the return statement.
+
+---
+
+## References
+
+- [n8n Respond to Webhook Documentation](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.respondtowebhook/)
+- [n8n Webhook Node Documentation](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.webhook/)
+- [n8n Code Node Documentation](https://docs.n8n.io/code/builtin/)
