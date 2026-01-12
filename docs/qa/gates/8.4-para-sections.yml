@@ -1,0 +1,57 @@
+schema: 1
+story: "8.4"
+story_title: "PARA Sections with Expand/Collapse"
+gate: PASS
+status_reason: "All PARA sections implemented with collapsible behavior, create modals, localStorage persistence, and proper empty states."
+reviewer: "Quinn (Test Architect)"
+updated: "2026-01-12T15:00:00Z"
+
+waiver: { active: false }
+
+top_issues: []
+
+risk_summary:
+  totals: { critical: 0, high: 0, medium: 0, low: 0 }
+  recommendations:
+    must_fix: []
+    monitor: []
+
+evidence:
+  tests_reviewed: 157
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    ac_gaps: []
+
+nfr_validation:
+  security: { status: PASS, notes: "User data properly scoped via session" }
+  performance: { status: PASS, notes: "Loading skeletons, optimistic data display" }
+  reliability: { status: PASS, notes: "localStorage try/catch for invalid JSON" }
+  maintainability: { status: PASS, notes: "Reusable NavSection component" }
+
+analysis:
+  strengths:
+    - "Projects section: active projects with FolderKanban icon, color dot, action count badge"
+    - "Areas section: areas with emoji icon (or CircleDot fallback), color"
+    - "Resources section: collapsed by default, 'View all' link"
+    - "Archive section: collapsed by default, 'Browse archive' link"
+    - "Collapsible sections with chevron indicators (ChevronDown/ChevronRight)"
+    - "[+] button on Projects opens CreateProjectModal"
+    - "[+] button on Areas opens CreateAreaModal"
+    - "State persistence: bee-sidebar-state key in localStorage"
+    - "Default state: projects/areas expanded, resources/archive collapsed"
+    - "Empty states: 'No active projects', 'No areas yet'"
+    - "CSS truncation via truncate class on labels"
+    - "Loading skeletons during fetch"
+
+  verification:
+    - "unified-sidebar.tsx: Projects section at lines 194-223"
+    - "unified-sidebar.tsx: Areas section at lines 226-255"
+    - "unified-sidebar.tsx: Resources section at lines 258-270"
+    - "unified-sidebar.tsx: Archive section at lines 273-285"
+    - "localStorage persistence at lines 88-106"
+    - "defaultSidebarState at lines 50-55"
+
+recommendations:
+  immediate: []
+  future: []

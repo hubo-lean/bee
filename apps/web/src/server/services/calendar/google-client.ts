@@ -1,4 +1,4 @@
-import { google, calendar_v3 } from "googleapis";
+import { google, calendar_v3, Auth } from "googleapis";
 import { decrypt } from "@/lib/encryption";
 import type {
   CalendarProvider,
@@ -59,7 +59,7 @@ interface GoogleEvent {
 export class GoogleCalendarClient implements CalendarProvider {
   private calendar: calendar_v3.Calendar | null = null;
   private account: CalendarAccountData | null = null;
-  private oauth2Client: ReturnType<typeof google.auth.OAuth2.prototype> | null = null;
+  private oauth2Client: Auth.OAuth2Client | null = null;
 
   async connect(account: CalendarAccountData): Promise<void> {
     if (!account.oauthAccessToken) {

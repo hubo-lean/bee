@@ -128,7 +128,7 @@ export async function semanticSearch(
   `;
 
   // Hydrate results with full item data if requested
-  let hydratedItems: Map<string, HydratedItem> = new Map();
+  const hydratedItems: Map<string, HydratedItem> = new Map();
   if (options.hydrate) {
     const inboxItemIds = results
       .filter((r) => r.sourceType === "INBOX_ITEM")

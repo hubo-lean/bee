@@ -55,10 +55,12 @@ export function SearchCommandBar() {
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebounce(query, 300);
 
-  const { data: results, isLoading } = trpc.search.search.useQuery(
+  const { data: searchResponse, isLoading } = trpc.search.search.useQuery(
     { query: debouncedQuery },
     { enabled: debouncedQuery.length >= 2 }
   );
+
+  const results = searchResponse?.results ?? [];
 
   // Cmd+K handler
   useEffect(() => {

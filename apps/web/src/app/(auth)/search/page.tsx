@@ -25,13 +25,15 @@ export default function SearchPage() {
     (v) => v !== undefined && (Array.isArray(v) ? v.length > 0 : true)
   );
 
-  const { data: results, isLoading } = trpc.search.search.useQuery(
+  const { data: searchResponse, isLoading } = trpc.search.search.useQuery(
     {
       query: debouncedQuery,
       filters: hasFilters ? filters : undefined,
     },
     { enabled: debouncedQuery.length >= 2 }
   );
+
+  const results = searchResponse?.results ?? [];
 
   const handleSelectFromHistory = (q: string, f?: SearchFilters) => {
     setQuery(q);

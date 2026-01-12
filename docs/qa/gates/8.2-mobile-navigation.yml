@@ -1,0 +1,61 @@
+schema: 1
+story: "8.2"
+story_title: "Mobile Navigation & Drawer"
+gate: PASS
+status_reason: "Mobile drawer and bottom nav fully implemented with animations, focus trap, body scroll lock, and comprehensive accessibility."
+reviewer: "Quinn (Test Architect)"
+updated: "2026-01-12T15:00:00Z"
+
+waiver: { active: false }
+
+top_issues: []
+
+risk_summary:
+  totals: { critical: 0, high: 0, medium: 0, low: 0 }
+  recommendations:
+    must_fix: []
+    monitor: []
+
+evidence:
+  tests_reviewed: 157
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    ac_gaps: []
+
+nfr_validation:
+  security: { status: PASS, notes: "No security concerns in navigation components" }
+  performance: { status: PASS, notes: "CSS transforms for GPU acceleration, Tailwind animations" }
+  reliability: { status: PASS, notes: "Focus restore on close, event listener cleanup" }
+  maintainability: { status: PASS, notes: "Context provider pattern for drawer state" }
+  accessibility: { status: PASS, notes: "Focus trap, aria-modal, aria-haspopup, 44px tap targets" }
+
+analysis:
+  strengths:
+    - "Bottom nav has 5 items: Home, Inbox, Review, Search, Menu"
+    - "Menu button with aria-haspopup=dialog and aria-expanded"
+    - "Drawer slides from left with 300ms ease-out animation"
+    - "85vw width with 320px max"
+    - "Semi-transparent backdrop (bg-black/50)"
+    - "X close button in header"
+    - "Escape key closes drawer"
+    - "Backdrop click closes drawer"
+    - "Focus trap implementation with Tab cycling"
+    - "Focus returns to previous element on close"
+    - "Body scroll lock when open"
+    - "44px minimum tap targets (min-h-[44px] min-w-[44px])"
+    - "lg:hidden hides on desktop (≥1024px)"
+    - "Route change auto-closes drawer"
+    - "Inbox badge shows count"
+
+  verification:
+    - "mobile-drawer.tsx: role=dialog, aria-modal=true at lines 164-166"
+    - "bottom-nav.tsx: 44px tap targets at line 254"
+    - "Focus trap at lines 109-141"
+    - "Body scroll lock at line 76"
+
+recommendations:
+  immediate: []
+  future:
+    - action: "Consider adding swipe-to-close gesture for better mobile UX"
+      refs: ["apps/web/src/components/navigation/mobile-drawer.tsx"]

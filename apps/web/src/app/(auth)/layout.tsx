@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { Sidebar } from "@/components/navigation/sidebar";
-import { BottomNav } from "@/components/navigation/bottom-nav";
+import { UnifiedSidebar } from "@/components/navigation/unified-sidebar";
+import { MobileNav } from "@/components/navigation/mobile-nav";
 import { AuthLayoutClient } from "@/components/layout/auth-layout-client";
 
 export default async function AuthLayout({
@@ -17,19 +17,19 @@ export default async function AuthLayout({
 
   return (
     <AuthLayoutClient>
-      <div className="min-h-screen bg-gray-50">
-        {/* Desktop Sidebar */}
-        <Sidebar user={session.user} className="hidden md:flex" />
+      <div className="min-h-screen bg-background">
+        {/* Desktop Sidebar - visible on lg and up (1024px+) */}
+        <UnifiedSidebar user={session.user} className="hidden lg:flex" />
 
         {/* Main Content */}
-        <main className="pb-20 md:pb-0 md:pl-64">
+        <main className="pb-14 lg:pb-0 lg:pl-[264px]">
           <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
             {children}
           </div>
         </main>
 
-        {/* Mobile Bottom Nav */}
-        <BottomNav className="md:hidden" />
+        {/* Mobile Navigation (Bottom Nav + Drawer) - visible below lg */}
+        <MobileNav user={session.user} className="lg:hidden" />
       </div>
     </AuthLayoutClient>
   );

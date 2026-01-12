@@ -1,4 +1,4 @@
-import { google, gmail_v1 } from "googleapis";
+import { google, gmail_v1, Auth } from "googleapis";
 import { prisma } from "@packages/db";
 import { aiClassificationService } from "./ai-classification.service";
 
@@ -47,7 +47,7 @@ export interface GmailSyncOptions {
  */
 export class GmailService {
   private gmail: gmail_v1.Gmail;
-  private oauth2Client: ReturnType<typeof google.auth.OAuth2.prototype>;
+  private oauth2Client: Auth.OAuth2Client;
 
   constructor(accessToken: string, refreshToken?: string) {
     this.oauth2Client = new google.auth.OAuth2(

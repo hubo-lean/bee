@@ -1,0 +1,55 @@
+schema: 1
+story: "8.3"
+story_title: "Quick Access Section & Routes"
+gate: PASS
+status_reason: "Quick Access section implemented with all 6 navigation items, correct icons, badges, and the /today route created."
+reviewer: "Quinn (Test Architect)"
+updated: "2026-01-12T15:00:00Z"
+
+waiver: { active: false }
+
+top_issues: []
+
+risk_summary:
+  totals: { critical: 0, high: 0, medium: 0, low: 0 }
+  recommendations:
+    must_fix: []
+    monitor: []
+
+evidence:
+  tests_reviewed: 157
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7, 8]
+    ac_gaps: []
+
+nfr_validation:
+  security: { status: PASS, notes: "Protected routes require authentication" }
+  performance: { status: PASS, notes: "Badge counts auto-refresh every 30s" }
+  reliability: { status: PASS, notes: "Queries handle loading states properly" }
+  maintainability: { status: PASS, notes: "Clean router structure with actions.ts" }
+
+analysis:
+  strengths:
+    - "Quick Access displays 6 items in correct order"
+    - "Icons: Inbox, Calendar (Today), Target (Objectives), PlayCircle (Review), Search, CalendarDays (Calendar)"
+    - "Inbox badge shows unprocessed count via trpc.inbox.count"
+    - "Today badge shows getTodayCount (due + scheduled + overdue)"
+    - "Badge auto-refresh every 30 seconds"
+    - "Section header styled as 'Quick Access' (title case)"
+    - "Active route highlighted with bg-primary/10"
+    - "All routes verified: /inbox, /today, /objectives, /review, /search, /calendar"
+    - "New /today page created with TodayView component"
+    - "New actionsRouter with getTodayCount and getToday queries"
+    - "ActionCard component for action display"
+
+  verification:
+    - "unified-sidebar.tsx: Quick Access section at lines 152-191"
+    - "Correct Lucide icons imported and used"
+    - "actions.ts: getTodayCount query at lines 10-46"
+    - "today/page.tsx exists with TodayView"
+    - "157 tests passing"
+
+recommendations:
+  immediate: []
+  future: []

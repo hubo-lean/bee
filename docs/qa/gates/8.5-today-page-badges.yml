@@ -1,0 +1,61 @@
+schema: 1
+story: "8.5"
+story_title: "Today Page & Badge System"
+gate: PASS
+status_reason: "Today page fully implemented with three sections (Overdue, Due Today, Scheduled), badge system with real-time updates and 99+ overflow."
+reviewer: "Quinn (Test Architect)"
+updated: "2026-01-12T15:00:00Z"
+
+waiver: { active: false }
+
+top_issues: []
+
+risk_summary:
+  totals: { critical: 0, high: 0, medium: 0, low: 0 }
+  recommendations:
+    must_fix: []
+    monitor: []
+
+evidence:
+  tests_reviewed: 157
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    ac_gaps: []
+
+nfr_validation:
+  security: { status: PASS, notes: "All queries scoped to authenticated user" }
+  performance: { status: PASS, notes: "Badge counts with 30s auto-refresh, invalidation on mutation" }
+  reliability: { status: PASS, notes: "Proper loading states and empty state handling" }
+  maintainability: { status: PASS, notes: "Clean separation: TodayView, ActionCard, actionsRouter" }
+  accessibility: { status: PASS, notes: "Badge has aria-label for screen readers" }
+
+analysis:
+  strengths:
+    - "/today route exists and displays actions"
+    - "Three sections: Overdue (red, CalendarX), Due Today (primary, Calendar), Scheduled (muted, Clock)"
+    - "Actions grouped using isOverdue, isDueToday, isScheduledToday flags"
+    - "Empty state: 'All clear for today!' with green checkmark"
+    - "Inbox badge shows inbox.count"
+    - "Today badge shows actions.getTodayCount"
+    - "Badge hidden when count is 0 (badge > 0 check)"
+    - "Badge shows '99+' when count > 99"
+    - "Badge styling: secondary variant, pill shape (h-5 px-2)"
+    - "Real-time updates via invalidation on toggleComplete"
+    - "Auto-refresh every 30 seconds"
+    - "ActionCard with checkbox, description, priority, metadata"
+
+  verification:
+    - "today-view.tsx: three sections at lines 52-114"
+    - "today-view.tsx: empty state at lines 30-40"
+    - "nav-item.tsx: badge > 99 ? '99+' at line 74"
+    - "nav-item.tsx: badge > 0 check at line 68"
+    - "nav-item.tsx: aria-label at line 72"
+    - "actions.ts: computed flags at lines 106-120"
+    - "invalidation on success at lines 14-16"
+
+recommendations:
+  immediate: []
+  future:
+    - action: "Consider adding quick-add action from Today page"
+      refs: ["apps/web/src/components/today/today-view.tsx"]
